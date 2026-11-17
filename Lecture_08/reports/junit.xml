@@ -1,30 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites name="Product Catalog API" tests="7" time="0.049">
-  <testsuite name="Default listing" id="b7f648b5-a404-40e9-86cb-54f05dfdf8d5" timestamp="2026-11-17T05:49:28.354Z" tests="2" failures="0" errors="0" time="0.025">
-    <testcase name="HTTP 200" time="0.025" classname="DefaultListing"/>
-    <testcase name="Response content is correct" time="0.025" classname="DefaultListing"/>
+  <testsuite name="Default listing" id="c4c22d48-07aa-4600-9032-0b1456e670cf" timestamp="2026-11-17T05:53:13.126Z" tests="2" failures="0" errors="0" time="0.024">
+    <testcase name="HTTP 200" time="0.024" classname="DefaultListing"/>
+    <testcase name="Response content is correct" time="0.024" classname="DefaultListing"/>
   </testsuite>
-  <testsuite name="Filter electronics" id="a99d5859-c473-4eb2-8463-599762335041" timestamp="2026-11-17T05:49:28.354Z" tests="2" failures="0" errors="0" time="0.005">
-    <testcase name="HTTP 200" time="0.005" classname="FilterElectronics"/>
-    <testcase name="Response content is correct" time="0.005" classname="FilterElectronics"/>
+  <testsuite name="Filter electronics" id="6f9a79cf-56e7-424d-875c-febef6b37c8a" timestamp="2026-11-17T05:53:13.126Z" tests="2" failures="0" errors="0" time="0.004">
+    <testcase name="HTTP 200" time="0.004" classname="FilterElectronics"/>
+    <testcase name="Response content is correct" time="0.004" classname="FilterElectronics"/>
   </testsuite>
-  <testsuite name="Second page" id="b0f6b6c9-67db-45b8-a4a4-3f1546683480" timestamp="2026-11-17T05:49:28.354Z" tests="2" failures="0" errors="0" time="0.005">
-    <testcase name="HTTP 200" time="0.005" classname="SecondPage"/>
-    <testcase name="Response content is correct" time="0.005" classname="SecondPage"/>
+  <testsuite name="Second page" id="46dc3671-3e9f-4142-abad-e9b75f951dcc" timestamp="2026-11-17T05:53:13.126Z" tests="2" failures="0" errors="0" time="0.003">
+    <testcase name="HTTP 200" time="0.003" classname="SecondPage"/>
+    <testcase name="Response content is correct" time="0.003" classname="SecondPage"/>
   </testsuite>
-  <testsuite name="Unknown category" id="972f8300-fe8d-4f24-842b-4883399ec791" timestamp="2026-11-17T05:49:28.354Z" tests="2" failures="0" errors="0" time="0.004">
-    <testcase name="HTTP 200" time="0.004" classname="UnknownCategory"/>
-    <testcase name="Response content is correct" time="0.004" classname="UnknownCategory"/>
+  <testsuite name="Unknown category" id="94cc6314-994c-480f-8644-99ee6bda4a32" timestamp="2026-11-17T05:53:13.126Z" tests="2" failures="0" errors="0" time="0.005">
+    <testcase name="HTTP 200" time="0.005" classname="UnknownCategory"/>
+    <testcase name="Response content is correct" time="0.005" classname="UnknownCategory"/>
   </testsuite>
-  <testsuite name="Reject page zero" id="b52db376-4b9c-4b33-92f6-69bf36b1b8ad" timestamp="2026-11-17T05:49:28.354Z" tests="2" failures="0" errors="0" time="0.002">
-    <testcase name="HTTP 400" time="0.002" classname="RejectPageZero"/>
-    <testcase name="Response content is correct" time="0.002" classname="RejectPageZero"/>
+  <testsuite name="Reject page zero" id="dba5e1b9-f827-4c21-afe6-606d2c67e269" timestamp="2026-11-17T05:53:13.126Z" tests="2" failures="0" errors="0" time="0.004">
+    <testcase name="HTTP 400" time="0.004" classname="RejectPageZero"/>
+    <testcase name="Response content is correct" time="0.004" classname="RejectPageZero"/>
   </testsuite>
-  <testsuite name="Reject non-integer page" id="99505b86-f176-4395-b768-b46fae0f4d2f" timestamp="2026-11-17T05:49:28.354Z" tests="2" failures="0" errors="0" time="0.004">
-    <testcase name="HTTP 400" time="0.004" classname="RejectNonIntegerPage"/>
-    <testcase name="Response content is correct" time="0.004" classname="RejectNonIntegerPage"/>
+  <testsuite name="Reject non-integer page" id="95efc523-6718-42c9-be8d-393d132190d7" timestamp="2026-11-17T05:53:13.126Z" tests="2" failures="0" errors="0" time="0.005">
+    <testcase name="HTTP 400" time="0.005" classname="RejectNonIntegerPage"/>
+    <testcase name="Response content is correct" time="0.005" classname="RejectNonIntegerPage"/>
   </testsuite>
-  <testsuite name="Reject excessive page size" id="ef08b7d2-34ef-45ea-9a39-930d20ca3da7" timestamp="2026-11-17T05:49:28.354Z" tests="2" failures="0" errors="0" time="0.004">
+  <testsuite name="Reject excessive page size" id="322dce27-b48a-43cf-b94d-5f982cdc861c" timestamp="2026-11-17T05:53:13.126Z" tests="2" failures="0" errors="0" time="0.004">
     <testcase name="HTTP 400" time="0.004" classname="RejectExcessivePageSize"/>
     <testcase name="Response content is correct" time="0.004" classname="RejectExcessivePageSize"/>
   </testsuite>
