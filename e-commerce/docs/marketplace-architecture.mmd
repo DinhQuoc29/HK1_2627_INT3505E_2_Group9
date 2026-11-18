@@ -1,0 +1,87 @@
+flowchart TB
+    subgraph Web["Marketplace web app"]
+        Buyer["Buyer storefront"]
+        Seller["Seller dashboard"]
+        Admin["Admin dashboard"]
+    end
+
+    subgraph Backend["Marketplace backend"]
+        API["Versioned HTTP API"]
+        Auth["Accounts, permissions and personalization preference"]
+        Catalog["Listings, categories and inventory"]
+        Orders["Cart, order history and fulfillment"]
+        Cancel["Cancel one eligible shop order atomically<br/>Restore stock and reverse its allocation once"]
+        subgraph Search["V1 · Ranked product search"]
+            Query["Retrieve listings matching query and filters"]
+            Baseline["Rule-based relevance ranking"]
+            SearchML["ML reranking of the same candidates"]
+            Results["Ranked search results"]
+            Query --> Baseline
+            Baseline -->|Baseline release or ML unavailable| Results
+            Baseline --> SearchML
+            SearchML -->|Success| Results
+        end
+        subgraph Checkout["Checkout database transaction · commit or roll back together"]
+            Stock["Check current prices and deduct stock"]
+            Split["Save one order per shop with purchased names and prices"]
+            Payment["Record one simulated payment per purchase<br/>and allocate its amount across seller orders"]
+            Stock --> Split --> Payment
+        end
+        Events["Activity tracking"]
+        subgraph Engine["V1 · Product recommendations"]
+            Recs["Similar products, personalized home and Popular tab"]
+            Rank["Rank by permitted preferences or by listing attributes"]
+            Popular["Precomputed popular products"]
+            Eligible["Keep active, in-stock products within the per-item budget"]
+            Recs --> Rank
+            Recs -->|Popular tab or new shopper| Popular
+            Rank -->|Model error or timeout| Popular
+            Rank --> Eligible
+            Popular --> Eligible
+        end
+        subgraph Deferred["V2 additions"]
+            Chat["Conversational shopping assistant"]
+            Reviews["Verified-purchase reviews and published ratings"]
+            Moderate["Review and listing moderation"]
+            Retrieval["Optional RAG over descriptions and manuals"]
+        end
+    end
+
+    Buyer --> API
+    Seller --> API
+    Admin --> API
+    API --> Auth
+    API --> Catalog
+    API --> Query
+    Query -->|Search published listings| Catalog
+    API --> Orders
+    API --> Events
+    API --> Recs
+    API --> Chat
+    API --> Reviews
+    API --> Moderate
+    Reviews -->|Verify purchaser and completed order item| Orders
+    Query -->|V2 rating filter| Reviews
+    Moderate -->|Retain or remove review| Reviews
+    Moderate -->|Retain or withdraw listing| Catalog
+
+    Auth -->|Social sign-in| Google["Google OAuth"]
+    Orders -->|One idempotency key per checkout| Stock
+    Orders --> Cancel
+    Cancel --> DB
+    Orders -.->|Purchase event after commit| Events
+    Chat -->|Interpret requests and explain matches| LLM["Language-model API"]
+    Chat -.-> Retrieval
+    Chat -->|Shopper needs and budget| Recs
+    Eligible -->|Check current listing, stock and price| Catalog
+    Events -->|Check preference before tracking| Auth
+    Rank -->|Check preference before using history| Auth
+    Rank -->|Read permitted activity| Events
+
+    Auth --> DB[("Shared relational database")]
+    Orders --> DB
+    Payment --> DB
+    Events --> DB
+    Reviews --> DB
+    Catalog --> DB
+    Catalog --> Photos[("Product photo storage")]
