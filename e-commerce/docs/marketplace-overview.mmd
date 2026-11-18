@@ -1,0 +1,26 @@
+---
+title: Marketplace overview
+---
+flowchart LR
+    Buyer([Buyer])
+    Seller([Seller])
+    Admin([Admin])
+
+    subgraph Marketplace["Marketplace · shared accounts, permissions and database"]
+        Discovery["Product search and recommendations<br/>Ranked results, homepage picks and similar items"]
+        Orders["Cart and orders<br/>Checkout, payment and tracking"]
+        Catalog["Product catalog<br/>Listings, categories and stock"]
+        Chat["Shopping chatbot · V2"]
+        Reviews["Reviews and moderation · V2"]
+    end
+
+    Buyer -->|Find products| Discovery
+    Discovery -->|Add to cart and buy| Orders
+    Buyer -->|Ask for advice| Chat
+    Chat -->|Find matching products| Discovery
+    Seller -->|Publish products and update stock| Catalog
+    Catalog -->|Supply listings| Discovery
+    Seller -->|Fulfill orders| Orders
+    Admin -->|Manage categories| Catalog
+    Buyer -->|Review a purchase| Reviews
+    Admin -->|Moderate reviews and listings| Reviews
