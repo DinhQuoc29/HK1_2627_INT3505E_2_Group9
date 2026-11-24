@@ -6,10 +6,15 @@ Quy ước (xem docs/Database_Tables.md):
 """
 import os
 import uuid
+from contextlib import contextmanager
 from datetime import datetime
+
+from dotenv import find_dotenv, load_dotenv
 
 from sqlalchemy import DateTime, create_engine, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+
+load_dotenv(find_dotenv())  # đọc e-commerce/.env nếu có; biến môi trường thật được ưu tiên
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -41,3 +46,25 @@ class TimestampMixin(CreatedAtMixin):
         onupdate=func.now(),
         nullable=False,
     )
+
+
+@contextmanager
+def session_scope():
+    """Unit of work cho một request: service chỉ flush, commit một lần ở đây.
+
+    Exception có thuộc tính `persist = True` vẫn commit trước khi lan ra ngoài
+    (dùng để lưu bộ đếm đăng nhập sai rồi mới trả 401).
+    """
+    session = SessionLocal()
+    try:
+        yield session
+    except BaseException as exc:
+        if getattr(exc, "persist", False):
+            session.commit()
+        else:
+            session.rollback()
+        raise
+    else:
+        session.commit()
+    finally:
+        session.close()

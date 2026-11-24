@@ -1,0 +1,843 @@
+openapi: 3.0.3
+info:
+  title: E-commerce API
+  version: 1.0.0
+  description: |
+    Accounts (đăng ký, đăng nhập, phiên), Checkout và Orders, Payments (giả lập), Inventory và Reviews.
+    Các endpoint Orders/Payments/Reviews/Inventory mới có đặc tả (design-first), chưa cài đặt.
+
+    **Quy ước.** Path chữ thường, kebab-case, danh từ số nhiều; query snake_case. Tiền là số nguyên VND.
+    Danh sách phân trang cursor `?limit=&cursor=` trả `{items, next_cursor}`. Chuyển trạng thái đơn mô hình hóa
+    như tài nguyên con (`/orders/{id}/cancellation`, `/shipment`, `/completion`).
+
+    **Xác thực.** Access token là JWT (HS256, 15 phút) gửi qua `Authorization: Bearer`. Claim `sid` trỏ tới
+    `auth_sessions`; mỗi request được bảo vệ đều kiểm tra phiên còn hiệu lực nên logout có hiệu lực ngay.
+    Refresh token là chuỗi ngẫu nhiên (DB chỉ lưu SHA-256), nằm trong cookie `HttpOnly; SameSite=Lax; Path=/api/v1/auth`
+    và được xoay vòng ở mỗi lần làm mới.
+
+    **Lỗi.** Mọi lỗi trả `application/problem+json` (RFC 9457).
+servers:
+  - url: http://localhost:5000
+tags:
+  - name: users
+  - name: auth
+  - name: checkouts
+  - name: orders
+  - name: payments
+  - name: inventory
+  - name: reviews
+paths:
+  /api/v1/users:
+    post:
+      tags: [users]
+      summary: Đăng ký tài khoản buyer (và mở phiên đăng nhập)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+            example: { email: an@example.com, password: Matkhau123, full_name: Nguyễn Văn An }
+      responses:
+        '201': { $ref: '#/components/responses/AuthSession' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '409':
+          description: Email đã được đăng ký
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: /problems/email-already-registered
+                title: Conflict
+                status: 409
+                detail: Email này đã được đăng ký.
+                instance: /api/v1/users
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/users/me:
+    get:
+      tags: [users]
+      summary: Hồ sơ của người dùng đang đăng nhập
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/auth/sessions:
+    post:
+      tags: [auth]
+      summary: Đăng nhập bằng email và mật khẩu
+      description: Sai 5 lần liên tiếp thì khóa 15 phút (429 + Retry-After). Email sai và mật khẩu sai trả cùng một lỗi.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/AuthSession' }
+        '401':
+          description: Sai email hoặc mật khẩu
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: /problems/invalid-credentials
+                title: Unauthorized
+                status: 401
+                detail: Email hoặc mật khẩu không đúng.
+                instance: /api/v1/auth/sessions
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+        '429':
+          description: Tài khoản bị khóa tạm thời
+          headers:
+            Retry-After: { schema: { type: integer }, description: Số giây còn bị khóa }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /api/v1/auth/sessions/google:
+    post:
+      tags: [auth]
+      summary: Đăng nhập bằng Google (ID token từ Google Identity Services)
+      description: |
+        Tra theo (google, sub). Chưa có thì: email Google đã xác minh trùng user sẵn có → liên kết;
+        không trùng → tạo user mới không mật khẩu. Google không phản hồi → 503, không tạo phiên hay tài khoản.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [credential]
+              properties:
+                credential: { type: string, description: ID token (JWT) do Google cấp }
+      responses:
+        '201': { $ref: '#/components/responses/AuthSession' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '503':
+          description: Không kết nối được Google (có thể thử lại)
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /api/v1/auth/sessions/current:
+    delete:
+      tags: [auth]
+      summary: Đăng xuất (thu hồi phiên hiện tại)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204':
+          description: Đã thu hồi phiên và xóa cookie refresh
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/auth/tokens:
+    post:
+      tags: [auth]
+      summary: Đổi refresh token (cookie) lấy access token mới
+      description: Refresh token được xoay vòng; token cũ dùng lại sẽ bị từ chối.
+      security: [{ refreshCookie: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/AuthSession' }
+        '401': { $ref: '#/components/responses/Problem' }
+  /api/v1/checkouts:
+    post:
+      tags: [checkouts]
+      summary: Xác nhận mua (tự tách đơn theo shop, trừ kho, tạo payment pending)
+      description: |
+        Server tự tính tiền theo giá hiện tại. Toàn bộ chạy trong một transaction: thiếu hàng một sản phẩm thì hủy cả lượt mua.
+        Header `Idempotency-Key` bắt buộc: gửi lại cùng key và cùng nội dung trả kết quả cũ (200); cùng key khác nội dung trả 409.
+        Các dòng giỏ hàng đã mua được xóa. **Vai trò:** buyer.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CheckoutRequest' }
+            example:
+              items:
+                - { product_id: 0190a1b2-0000-7000-8000-00000000a001, quantity: 2, expected_unit_price: 189000 }
+                - { product_id: 0190a1b2-0000-7000-8000-00000000b002, quantity: 1, expected_unit_price: 590000 }
+              shipping: { name: Nguyễn Văn An, phone: '0901234567', address: '12 Phố Huế, Hai Bà Trưng, Hà Nội' }
+      responses:
+        '201':
+          description: Lượt mua mới được tạo
+          headers:
+            Location: { schema: { type: string }, description: 'URL của lượt mua: /api/v1/checkouts/{id}' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Checkout' }
+        '200':
+          description: Gửi lại cùng Idempotency-Key và cùng nội dung; trả kết quả của lần đầu
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Checkout' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: |
+            `idempotency-key-conflict` (cùng key khác nội dung), `product-unavailable` (ngừng bán),
+            `price-changed` (giá khác giá client thấy, kèm giá mới), `insufficient-stock` (thiếu hàng).
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                  - { $ref: '#/components/schemas/Problem' }
+                  - { $ref: '#/components/schemas/PriceChangedProblem' }
+                  - { $ref: '#/components/schemas/InsufficientStockProblem' }
+              examples:
+                price-changed:
+                  value:
+                    type: /problems/price-changed
+                    title: Conflict
+                    status: 409
+                    detail: Giá một số sản phẩm đã thay đổi. Vui lòng xem lại giỏ hàng.
+                    instance: /api/v1/checkouts
+                    changes:
+                      - { product_id: 0190a1b2-0000-7000-8000-00000000a001, expected_unit_price: 189000, current_unit_price: 199000 }
+                insufficient-stock:
+                  value:
+                    type: /problems/insufficient-stock
+                    title: Conflict
+                    status: 409
+                    detail: Một số sản phẩm không đủ hàng.
+                    instance: /api/v1/checkouts
+                    products:
+                      - { product_id: 0190a1b2-0000-7000-8000-00000000b002, requested: 3, available: 1 }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/checkouts/{checkout_id}:
+    get:
+      tags: [checkouts]
+      summary: Xem một lượt mua (kèm các đơn và payment)
+      description: '**Vai trò:** buyer sở hữu lượt mua.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/CheckoutId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Checkout' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/checkouts/{checkout_id}/payment:
+    get:
+      tags: [payments]
+      summary: Trạng thái thanh toán của lượt mua
+      description: '**Vai trò:** buyer sở hữu lượt mua.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/CheckoutId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Payment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/checkouts/{checkout_id}/payment-attempts:
+    post:
+      tags: [payments]
+      summary: Thanh toán giả lập (demo, không chuyển tiền thật)
+      description: |
+        Khóa payment trước rồi mới tới đơn. Thành công: `amount` = tổng các đơn còn `pending_payment`, tạo phân bổ cho từng đơn
+        và chuyển đơn sang `paid`. Thất bại: payment sang `failed` (có thể thử lại). Payment đã `succeeded` thì trả kết quả cũ,
+        không ghi nhận trùng. `simulate` chỉ dùng cho demo/kiểm thử. **Vai trò:** buyer sở hữu lượt mua.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/CheckoutId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                simulate: { type: string, enum: [succeeded, failed], default: succeeded }
+      responses:
+        '200':
+          description: Kết quả lần thanh toán (kiểm tra `status`)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Payment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Payment đã `cancelled` (mọi đơn đã bị hủy)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /api/v1/orders:
+    get:
+      tags: [orders]
+      summary: Lịch sử đơn của buyer
+      description: Sắp xếp mới nhất trước; phân trang cursor theo `(created_at, id)`. **Vai trò:** buyer.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderStatusFilter'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/orders/{order_id}:
+    get:
+      tags: [orders]
+      summary: Chi tiết một đơn
+      description: '**Vai trò:** buyer của đơn hoặc seller sở hữu shop của đơn. Người khác nhận 403.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/orders/{order_id}/cancellation:
+    post:
+      tags: [orders]
+      summary: Hủy đơn (pending_payment hoặc paid)
+      description: |
+        Hoàn kho đúng số lượng của đơn này. Đơn đã trả: phân bổ sang `refunded` và cộng `refunded_amount`.
+        Đơn chưa trả: nếu lượt mua không còn đơn chờ thanh toán thì payment sang `cancelled`.
+        Hủy lần hai trả 409 và không hoàn kho thêm. **Vai trò:** buyer của đơn hoặc seller của shop.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Đơn sau khi hủy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /api/v1/orders/{order_id}/shipment:
+    post:
+      tags: [orders]
+      summary: Seller chuyển đơn đã thanh toán sang đang giao (paid → shipping)
+      description: '**Vai trò:** seller sở hữu shop của đơn.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Đơn sau khi cập nhật
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /api/v1/orders/{order_id}/completion:
+    post:
+      tags: [orders]
+      summary: Seller xác nhận đã giao (shipping → completed, mở quyền đánh giá)
+      description: Không nhảy thẳng từ `paid` sang `completed`. **Vai trò:** seller sở hữu shop của đơn.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Đơn sau khi cập nhật
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/InvalidTransition' }
+  /api/v1/shops/me/orders:
+    get:
+      tags: [orders]
+      summary: Đơn của shop (seller xem và lọc theo trạng thái)
+      description: Mới nhất trước, phân trang cursor. **Vai trò:** seller.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderStatusFilter'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/products/{product_id}/inventory:
+    get:
+      tags: [inventory]
+      summary: Tồn kho hiện tại (chưa có dòng nghĩa là 0)
+      description: '**Vai trò:** seller sở hữu sản phẩm.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Inventory' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [inventory]
+      summary: Đặt số lượng tồn kho
+      description: '**Vai trò:** seller sở hữu sản phẩm. Số lượng không được âm.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              properties:
+                quantity: { type: integer, minimum: 0 }
+      responses:
+        '200':
+          description: Tồn kho sau khi cập nhật
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Inventory' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/products/{product_id}/reviews:
+    get:
+      tags: [reviews]
+      summary: Đánh giá của sản phẩm (chỉ review `visible`)
+      description: Công khai, không cần đăng nhập. Mới nhất trước, phân trang cursor.
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewPage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/order-items/{order_item_id}/review:
+    post:
+      tags: [reviews]
+      summary: Đánh giá một dòng hàng đã mua
+      description: |
+        Dòng hàng phải thuộc đơn của chính người dùng và đơn đã `completed`. Mỗi dòng hàng chỉ một review, kể cả khi hai
+        request đến đồng thời. Sau khi ghi, điểm trung bình và số review của sản phẩm được tính lại. **Vai trò:** buyer.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderItemId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewRequest' }
+            example: { rating: 5, content: Giao nhanh, đúng mô tả. }
+      responses:
+        '201':
+          description: Đã tạo review
+          headers:
+            Location: { schema: { type: string }, description: 'URL của review: /api/v1/reviews/{id}' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`review-already-exists` (dòng hàng đã có review) hoặc `order-not-completed` (đơn chưa hoàn tất)'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/reviews/{review_id}:
+    patch:
+      tags: [reviews]
+      summary: Tác giả sửa đánh giá
+      description: '**Vai trò:** tác giả của review.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ReviewId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                rating: { type: integer, minimum: 1, maximum: 5 }
+                content: { type: string, maxLength: 2000, nullable: true }
+      responses:
+        '200':
+          description: Review sau khi sửa
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+    delete:
+      tags: [reviews]
+      summary: Gỡ đánh giá
+      description: |
+        Review biến mất khỏi danh sách và không còn tính vào điểm sản phẩm; dòng hàng vẫn **không** được đánh giá lại
+        (SPEC-19: giữ định danh lượt gửi để đảm bảo một lần cho mỗi dòng hàng). **Vai trò:** tác giả hoặc admin.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ReviewId'
+      responses:
+        '204': { description: Đã gỡ }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/reviews/{review_id}/visibility:
+    put:
+      tags: [reviews]
+      summary: Admin ẩn hoặc hiện lại một đánh giá
+      description: '`hidden` không tính vào điểm sản phẩm. **Vai trò:** admin.'
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ReviewId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [visible, hidden] }
+      responses:
+        '200':
+          description: Review sau khi cập nhật
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/users/me/reviews:
+    get:
+      tags: [reviews]
+      summary: Đánh giá của tôi
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+    refreshCookie: { type: apiKey, in: cookie, name: refresh_token }
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Chuỗi duy nhất cho mỗi lần xác nhận mua (tối đa 64 ký tự); client tự sinh, ví dụ UUID.
+      schema: { type: string, minLength: 1, maxLength: 64 }
+    CheckoutId: { name: checkout_id, in: path, required: true, schema: { type: string, format: uuid } }
+    OrderId: { name: order_id, in: path, required: true, schema: { type: string, format: uuid } }
+    OrderItemId: { name: order_item_id, in: path, required: true, schema: { type: string, format: uuid } }
+    ProductId: { name: product_id, in: path, required: true, schema: { type: string, format: uuid } }
+    ReviewId: { name: review_id, in: path, required: true, schema: { type: string, format: uuid } }
+    OrderStatusFilter:
+      name: status
+      in: query
+      description: Lọc theo trạng thái đơn
+      schema: { $ref: '#/components/schemas/OrderStatus' }
+    Limit:
+      name: limit
+      in: query
+      description: Số phần tử mỗi trang
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Cursor:
+      name: cursor
+      in: query
+      description: Con trỏ không trong suốt lấy từ `next_cursor` của trang trước
+      schema: { type: string }
+  responses:
+    AuthSession:
+      description: Phiên đã được tạo; refresh token nằm trong cookie HttpOnly `refresh_token`
+      headers:
+        Set-Cookie: { schema: { type: string } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AuthSession' }
+    Problem:
+      description: Lỗi
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: Thiếu/hết hạn/không hợp lệ hoặc phiên đã kết thúc
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ValidationProblem:
+      description: Dữ liệu không hợp lệ
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: /problems/validation-error
+            title: Unprocessable Content
+            status: 422
+            detail: Dữ liệu gửi lên không hợp lệ.
+            instance: /api/v1/users
+            errors:
+              - { field: password, message: Mật khẩu cần có cả chữ và số. }
+    Forbidden:
+      description: Không đủ quyền (sai vai trò hoặc không phải chủ tài nguyên)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: /problems/forbidden
+            title: Forbidden
+            status: 403
+            detail: Bạn không có quyền thực hiện thao tác này.
+            instance: /api/v1/orders/0190a1b2-0000-7000-8000-00000000c003
+    NotFound:
+      description: Không tìm thấy tài nguyên
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    InvalidTransition:
+      description: Trạng thái hiện tại không cho phép chuyển (`invalid-order-transition`); không có tác động phụ nào được chạy
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          example:
+            type: /problems/invalid-order-transition
+            title: Conflict
+            status: 409
+            detail: Đơn đang ở trạng thái cancelled nên không thể hủy.
+            instance: /api/v1/orders/0190a1b2-0000-7000-8000-00000000c003/cancellation
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [email, password, full_name]
+      properties:
+        email: { type: string, format: email, maxLength: 255 }
+        password: { type: string, minLength: 8, maxLength: 72, description: 'Có cả chữ và số, tối đa 72 byte' }
+        full_name: { type: string, minLength: 1, maxLength: 100 }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        full_name: { type: string }
+        role: { type: string, enum: [buyer, seller, admin] }
+        created_at: { type: string, format: date-time }
+    AuthSession:
+      type: object
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, example: Bearer }
+        expires_in: { type: integer, example: 900 }
+        user: { $ref: '#/components/schemas/User' }
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, example: /problems/validation-error }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              message: { type: string }
+    Money:
+      type: integer
+      format: int64
+      minimum: 0
+      description: Số tiền VND (số nguyên)
+      example: 189000
+    OrderStatus:
+      type: string
+      enum: [pending_payment, paid, shipping, completed, cancelled]
+    CheckoutRequest:
+      type: object
+      required: [items, shipping]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [product_id, quantity, expected_unit_price]
+            properties:
+              product_id: { type: string, format: uuid }
+              quantity: { type: integer, minimum: 1 }
+              expected_unit_price: { allOf: [{ $ref: '#/components/schemas/Money' }], description: Giá client đang thấy; khác giá hiện tại thì 409 }
+        shipping: { $ref: '#/components/schemas/Shipping' }
+    Shipping:
+      type: object
+      required: [name, phone, address]
+      properties:
+        name: { type: string, maxLength: 100 }
+        phone: { type: string, maxLength: 20 }
+        address: { type: string, maxLength: 500 }
+    OrderItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        product_id: { type: string, format: uuid }
+        product_name: { type: string, description: Snapshot tên lúc đặt }
+        unit_price: { $ref: '#/components/schemas/Money' }
+        quantity: { type: integer }
+        line_total: { $ref: '#/components/schemas/Money' }
+        has_review: { type: boolean, description: 'Trường tính toán, không có trong bảng order_items' }
+    Order:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        checkout_id: { type: string, format: uuid }
+        shop: { type: object, properties: { id: { type: string, format: uuid }, name: { type: string } } }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        total_amount: { $ref: '#/components/schemas/Money' }
+        shipping: { $ref: '#/components/schemas/Shipping' }
+        items: { type: array, items: { $ref: '#/components/schemas/OrderItem' } }
+        paid_at: { type: string, format: date-time, nullable: true }
+        shipped_at: { type: string, format: date-time, nullable: true }
+        completed_at: { type: string, format: date-time, nullable: true }
+        cancelled_at: { type: string, format: date-time, nullable: true }
+        cancelled_by: { type: string, enum: [buyer, seller], nullable: true }
+        created_at: { type: string, format: date-time }
+    OrderPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Order' } }
+        next_cursor: { type: string, nullable: true, description: null nếu hết dữ liệu }
+    PaymentAllocation:
+      type: object
+      properties:
+        order_id: { type: string, format: uuid }
+        amount: { $ref: '#/components/schemas/Money' }
+        status: { type: string, enum: [captured, refunded] }
+        refunded_at: { type: string, format: date-time, nullable: true }
+    Payment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        checkout_id: { type: string, format: uuid }
+        method: { type: string, enum: [simulated], description: v1 chỉ có thanh toán giả lập }
+        status: { type: string, enum: [pending, succeeded, failed, cancelled] }
+        amount: { $ref: '#/components/schemas/Money' }
+        refunded_amount: { $ref: '#/components/schemas/Money' }
+        attempt_count: { type: integer }
+        paid_at: { type: string, format: date-time, nullable: true }
+        allocations: { type: array, items: { $ref: '#/components/schemas/PaymentAllocation' } }
+    Checkout:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        total_amount: { $ref: '#/components/schemas/Money' }
+        created_at: { type: string, format: date-time }
+        orders: { type: array, items: { $ref: '#/components/schemas/Order' } }
+        payment: { $ref: '#/components/schemas/Payment' }
+    Inventory:
+      type: object
+      properties:
+        product_id: { type: string, format: uuid }
+        quantity: { type: integer, minimum: 0 }
+        updated_at: { type: string, format: date-time, nullable: true }
+    ReviewRequest:
+      type: object
+      required: [rating]
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        content: { type: string, maxLength: 2000, nullable: true }
+    Review:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        product_id: { type: string, format: uuid }
+        order_item_id: { type: string, format: uuid }
+        author: { type: object, properties: { full_name: { type: string } }, description: 'Chỉ tên hiển thị, không lộ user_id hay email' }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        content: { type: string, nullable: true }
+        status: { type: string, enum: [visible, hidden] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ReviewPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Review' } }
+        next_cursor: { type: string, nullable: true }
+    PriceChangedProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            changes:
+              type: array
+              items:
+                type: object
+                properties:
+                  product_id: { type: string, format: uuid }
+                  expected_unit_price: { $ref: '#/components/schemas/Money' }
+                  current_unit_price: { $ref: '#/components/schemas/Money' }
+    InsufficientStockProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            products:
+              type: array
+              items:
+                type: object
+                properties:
+                  product_id: { type: string, format: uuid }
+                  requested: { type: integer }
+                  available: { type: integer }
