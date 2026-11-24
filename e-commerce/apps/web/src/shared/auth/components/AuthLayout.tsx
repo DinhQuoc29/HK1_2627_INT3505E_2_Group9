@@ -65,7 +65,7 @@ export function AuthLayout({ title, subtitle, children, footer }: { title: strin
     <div className="grid min-h-full lg:grid-cols-[1.05fr_1fr]">
       <BrandPanel />
       <main className="flex items-center justify-center px-5 py-10 sm:px-8">
-        <div className="w-full max-w-[420px]">
+        <div className="w-full max-w-[400px]">
           <div className="mb-8 lg:hidden"><Logo /></div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">{title}</h1>
           <p className="mt-1.5 text-sm text-zinc-500 dark:text-zinc-400">{subtitle}</p>

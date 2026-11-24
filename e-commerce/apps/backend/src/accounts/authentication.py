@@ -76,6 +76,47 @@ def verify_google_id_token(credential: str, client_id: str) -> dict:
         return id_token.verify_oauth2_token(credential, g_requests.Request(), client_id)
     except g_exc.TransportError as exc:
         raise GoogleUnavailable(str(exc)) from exc
+    except g_exc.GoogleAuthError as exc:  # vd sai issuer: thư viện ném GoogleAuthError chứ không phải ValueError
+        raise ValueError(str(exc)) from exc
+
+
+class FacebookUnavailable(Exception):
+    """Không liên lạc được Facebook, hoặc chưa cấu hình app id/secret (lỗi tạm thời, nên thử lại)."""
+
+
+_GRAPH = "https://graph.facebook.com/v21.0"
+
+
+def verify_facebook_token(access_token: str, app_id: str, app_secret: str) -> dict:
+    """Xác minh access token của Facebook và trả hồ sơ {id, name, email?}.
+
+    Bước 1 (debug_token): token phải còn hạn và được cấp cho CHÍNH app của mình (chống token của app khác).
+    Bước 2 (/me): lấy id, tên, email. ValueError: token sai. FacebookUnavailable: lỗi mạng/Facebook/cấu hình.
+    """
+    import requests
+
+    if not app_id or not app_secret:
+        raise FacebookUnavailable("FACEBOOK_APP_ID/FACEBOOK_APP_SECRET chưa được cấu hình")
+    try:
+        dbg = requests.get(
+            f"{_GRAPH}/debug_token",
+            params={"input_token": access_token, "access_token": f"{app_id}|{app_secret}"},
+            timeout=5,
+        )
+        if dbg.status_code >= 500:
+            raise FacebookUnavailable(f"debug_token {dbg.status_code}")
+        data = dbg.json().get("data", {}) if dbg.status_code == 200 else {}
+        if not data.get("is_valid") or str(data.get("app_id")) != str(app_id):
+            raise ValueError("Facebook access token không hợp lệ")
+        me = requests.get(f"{_GRAPH}/me", params={"fields": "id,name,email", "access_token": access_token}, timeout=5)
+        if me.status_code >= 500:
+            raise FacebookUnavailable(f"/me {me.status_code}")
+        profile = me.json() if me.status_code == 200 else {}
+    except requests.RequestException as exc:
+        raise FacebookUnavailable(str(exc)) from exc
+    if not profile.get("id") or str(profile["id"]) != str(data.get("user_id")):
+        raise ValueError("Hồ sơ Facebook không khớp token")
+    return profile
 
 
 def get_settings(request: Request) -> Settings:

@@ -1,32 +1,56 @@
 import { GoogleLogin } from '@react-oauth/google'
+import { useEffect, useRef, useState } from 'react'
+
+import { SOCIAL_FONT } from './socialStyle'
 
 export const GOOGLE_ENABLED = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID)
 
 /** Nút Google (Google Identity Services). Chưa cấu hình Client ID thì hiển thị nút bị vô hiệu kèm giải thích. */
-export function GoogleSignIn({ onCredential, onError }: { onCredential: (credential: string) => void; onError: () => void }) {
+export type GoogleText = 'signin_with' | 'signup_with' | 'continue_with'
+
+export function GoogleSignIn({
+  onCredential, onError, width = 400, text = 'continue_with',
+}: { onCredential: (credential: string) => void; onError: () => void; width?: number; text?: GoogleText }) {
   if (!GOOGLE_ENABLED) {
     return (
       <div>
         <button
           type="button"
           disabled
-          className="flex h-11 w-full cursor-not-allowed items-center justify-center gap-2.5 rounded-xl border border-zinc-300 text-sm font-medium text-zinc-400 dark:border-zinc-700"
+          className="relative flex h-10 w-full cursor-not-allowed items-center justify-center rounded-full border border-zinc-300 text-sm font-medium text-zinc-400 dark:border-zinc-700"
+          style={{ fontFamily: SOCIAL_FONT }}
         >
-          <GoogleMark /> Tiếp tục với Google
+          <span className="absolute left-3 flex"><GoogleMark /></span> Tiếp tục với Google
         </button>
         <p className="mt-1.5 text-center text-xs text-zinc-500">Chưa cấu hình VITE_GOOGLE_CLIENT_ID.</p>
       </div>
     )
   }
+  return <GoogleButton onCredential={onCredential} onError={onError} width={width} text={text} />
+}
+
+/** Nút Google chính thức; độ rộng co theo khung chứa (GIS cho phép 200–400px) để không tràn trên màn hình nhỏ. */
+function GoogleButton({ onCredential, onError, width, text }: { onCredential: (c: string) => void; onError: () => void; width: number; text: GoogleText }) {
+  const box = useRef<HTMLDivElement>(null)
+  const [w, setW] = useState(width)
+  useEffect(() => {
+    const el = box.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const fit = () => { const cw = Math.floor(el.clientWidth); if (cw >= 200) setW(Math.min(width, 400, cw)) }
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [width])
   return (
-    <div className="flex justify-center">
+    <div ref={box} className="flex w-full justify-center">
       <GoogleLogin
         onSuccess={(r) => (r.credential ? onCredential(r.credential) : onError())}
         onError={onError}
-        text="continue_with"
+        text={text}
         shape="pill"
         size="large"
-        width="380"
+        width={String(w)}
         theme="outline"
       />
     </div>

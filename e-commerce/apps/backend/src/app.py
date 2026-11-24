@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 
 import accounts.model  # noqa: F401  (đăng ký model)
 from common.errors import register_error_handlers
+from common.ratelimit import SlidingWindowLimiter
 from config import Settings
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -40,6 +41,7 @@ def create_app(**overrides) -> FastAPI:
     # Tài liệu API là openapi.yaml viết trước (design-first); tắt trang tự sinh để chỉ có một nguồn sự thật.
     app = FastAPI(title="E-commerce API", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.settings = settings
+    app.state.limiter = SlidingWindowLimiter()
     register_error_handlers(app)
 
     from accounts.routes import router as accounts_router

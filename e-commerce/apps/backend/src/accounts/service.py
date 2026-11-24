@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from accounts import authentication as auth
 from accounts import repository
 from accounts.model import AuthSession, Role, User
+from accounts.schema import UserOut
 from common.errors import ProblemError
 from config import Settings
 from db import new_id
@@ -24,9 +25,17 @@ _INVALID_CREDENTIALS = ("invalid-credentials", "Email hoặc mật khẩu không
 
 @dataclass
 class IssuedSession:
-    user: User
+    user: UserOut
     access_token: str
     refresh_token: str
+
+
+def profile(s: Session, user: User) -> UserOut:
+    """Hồ sơ gửi ra API: không có password_hash; has_password/providers là trường tính toán."""
+    return UserOut(
+        id=user.id, email=user.email, full_name=user.full_name, role=user.role, created_at=user.created_at,
+        providers=repository.list_providers(s, user.id), has_password=bool(user.password_hash),
+    )
 
 
 def _open_session(s: Session, st: Settings, user: User) -> IssuedSession:
@@ -40,7 +49,7 @@ def _open_session(s: Session, st: Settings, user: User) -> IssuedSession:
             expires_at=utcnow() + timedelta(days=st.refresh_token_days),
         ),
     )
-    return IssuedSession(user, auth.issue_access_token(st, user.id, session.id), refresh)
+    return IssuedSession(profile(s, user), auth.issue_access_token(st, user.id, session.id), refresh)
 
 
 def register(s: Session, st: Settings, email: str, password: str, full_name: str) -> IssuedSession:
@@ -100,14 +109,15 @@ def refresh(s: Session, st: Settings, refresh_token: str | None) -> IssuedSessio
     new_refresh, new_hash = auth.new_refresh_token()
     session.refresh_token_hash = new_hash
     s.flush()
-    return IssuedSession(user, auth.issue_access_token(st, user.id, session.id), new_refresh)
+    return IssuedSession(profile(s, user), auth.issue_access_token(st, user.id, session.id), new_refresh)
 
 
 def logout(s: Session, sid) -> None:
     repository.revoke_session(s, sid, utcnow())
 
 
-def login_with_google(s: Session, st: Settings, credential: str) -> IssuedSession:
+def _verify_google(st: Settings, credential: str) -> tuple[str, str, dict]:
+    """Trả (sub, email, claims) đã xác minh; lỗi Google trả 503 (có thể thử lại) hoặc 401."""
     try:
         claims = auth.verify_google_id_token(credential, st.google_client_id)
     except auth.GoogleUnavailable:
@@ -119,11 +129,14 @@ def login_with_google(s: Session, st: Settings, credential: str) -> IssuedSessio
         )
     except ValueError:
         raise ProblemError(401, "invalid-google-token", "Không xác minh được tài khoản Google.")
-
     subject, email = claims.get("sub"), (claims.get("email") or "").lower()
     if not subject or not email or not claims.get("email_verified"):
         raise ProblemError(401, "invalid-google-token", "Email Google chưa được xác minh.")
+    return subject, email, claims
 
+
+def login_with_google(s: Session, st: Settings, credential: str) -> IssuedSession:
+    subject, email, claims = _verify_google(st, credential)
     identity = repository.get_identity(s, "google", subject)
     if identity is not None:
         user = repository.get_user(s, identity.user_id)
@@ -136,3 +149,90 @@ def login_with_google(s: Session, st: Settings, credential: str) -> IssuedSessio
             )
         repository.add_identity(s, user.id, "google", subject)
     return _open_session(s, st, user)
+
+
+def _verify_facebook(st: Settings, access_token: str) -> dict:
+    """Trả hồ sơ Facebook đã xác minh; lỗi Facebook trả 503 (có thể thử lại) hoặc 401."""
+    try:
+        return auth.verify_facebook_token(access_token, st.facebook_app_id, st.facebook_app_secret)
+    except auth.FacebookUnavailable:
+        log.error("facebook_unavailable")
+        raise ProblemError(
+            503, "facebook-unavailable",
+            "Không kết nối được tới Facebook. Tài khoản của bạn vẫn an toàn, vui lòng thử lại.",
+            headers={"Retry-After": "5"},
+        )
+    except ValueError:
+        raise ProblemError(401, "invalid-facebook-token", "Không xác minh được tài khoản Facebook.")
+
+
+def login_with_facebook(s: Session, st: Settings, access_token: str) -> IssuedSession:
+    """Đăng nhập/đăng ký bằng Facebook.
+
+    Khác Google: KHÔNG tự gộp vào tài khoản có sẵn chỉ vì trùng email (email Facebook không có cờ đã-xác-minh
+    đáng tin như Google, tự gộp có thể bị lợi dụng chiếm tài khoản). Người dùng phải đăng nhập bằng cách khác
+    rồi liên kết Facebook trong trang tài khoản.
+    """
+    profile = _verify_facebook(st, access_token)
+    subject, email = str(profile["id"]), (profile.get("email") or "").strip().lower()
+    identity = repository.get_identity(s, "facebook", subject)
+    if identity is not None:
+        user = repository.get_user(s, identity.user_id)
+    else:
+        if not email:
+            raise ProblemError(
+                422, "facebook-email-missing",
+                "Tài khoản Facebook chưa chia sẻ email. Hãy cho phép quyền email hoặc đăng ký bằng email.",
+            )
+        if repository.get_user_by_email(s, email):
+            raise ProblemError(
+                409, "account-exists",
+                "Email của Facebook đã có tài khoản. Hãy đăng nhập bằng mật khẩu hoặc Google, "
+                "rồi liên kết Facebook trong trang tài khoản.",
+            )
+        name = (profile.get("name") or email.split("@")[0]).strip()[:100]
+        user = repository.add_user(
+            s, User(id=new_id(), email=email, full_name=name, password_hash=None, role=Role.BUYER.value)
+        )
+        try:
+            repository.add_identity(s, user.id, "facebook", subject)
+        except IntegrityError:
+            raise ProblemError(409, "provider-already-linked", "Tài khoản Facebook này đã được liên kết.")
+    return _open_session(s, st, user)
+
+
+def link_identity(s: Session, st: Settings, user: User, provider: str, credential: str) -> UserOut:
+    """Người dùng đã đăng nhập liên kết thêm tài khoản Google/Facebook của mình (SPEC-01)."""
+    if provider == "google":
+        subject = _verify_google(st, credential)[0]
+    elif provider == "facebook":
+        subject = str(_verify_facebook(st, credential)["id"])
+    else:
+        raise ProblemError(404, "identity-not-found", "Nhà cung cấp không được hỗ trợ.")
+    label = provider.capitalize()
+    existing = repository.get_identity(s, provider, subject)
+    if existing is not None:
+        if existing.user_id == user.id:
+            raise ProblemError(409, "provider-already-linked", f"Tài khoản {label} này đã được liên kết với bạn.")
+        raise ProblemError(409, f"{provider}-account-in-use", f"Tài khoản {label} này đã liên kết với một tài khoản khác.")
+    if provider in repository.list_providers(s, user.id):
+        raise ProblemError(409, "provider-already-linked", f"Bạn đã liên kết một tài khoản {label} khác.")
+    try:
+        repository.add_identity(s, user.id, provider, subject)
+    except IntegrityError:  # hai request liên kết đồng thời
+        raise ProblemError(409, "provider-already-linked", f"Tài khoản {label} này đã được liên kết.")
+    log.info("identity_linked user_id=%s provider=%s", user.id, provider)
+    return profile(s, user)
+
+
+def unlink_provider(s: Session, user: User, provider: str) -> None:
+    linked = repository.list_providers(s, user.id)
+    if provider not in linked:
+        raise ProblemError(404, "identity-not-found", "Bạn chưa liên kết nhà cung cấp này.")
+    # Không để tài khoản mất mọi cách đăng nhập: cần còn mật khẩu hoặc một nhà cung cấp khác.
+    if not user.password_hash and len(linked) == 1:
+        raise ProblemError(
+            409, "last-login-method", "Đây là cách đăng nhập duy nhất của bạn nên không thể hủy liên kết."
+        )
+    repository.delete_identity(s, user.id, provider)
+    log.info("identity_unlinked user_id=%s provider=%s", user.id, provider)

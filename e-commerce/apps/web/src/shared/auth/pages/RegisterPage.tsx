@@ -4,13 +4,13 @@ import { useForm, useWatch } from 'react-hook-form'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
 import { AuthLayout } from '../components/AuthLayout'
-import { GoogleSignIn } from '../components/GoogleSignIn'
+import { SocialSignIn } from '../components/SocialSignIn'
 import { Alert, Button, Divider, PasswordField, TextField } from '../components/ui'
 import { describeError, safeRedirect } from '../errors'
 import { registerSchema, type RegisterValues } from '../schemas'
 
 export default function RegisterPage() {
-  const { register: signUp, loginWithGoogle } = useAuth()
+  const { register: signUp, loginWithGoogle, loginWithFacebook } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [formError, setFormError] = useState<string>()
@@ -36,10 +36,10 @@ export default function RegisterPage() {
     } catch (e) { fail(e) }
   })
 
-  const onGoogle = async (credential: string) => {
+  const social = (fn: (token: string) => Promise<void>) => async (token: string) => {
     setFormError(undefined)
     try {
-      await loginWithGoogle(credential)
+      await fn(token)
       navigate(to, { replace: true })
     } catch (e) { fail(e) }
   }
@@ -51,7 +51,7 @@ export default function RegisterPage() {
       footer={<>Đã có tài khoản? <Link to="/login" state={location.state} className="font-semibold text-brand-600 hover:underline">Đăng nhập</Link></>}
     >
       {formError && <Alert>{formError}</Alert>}
-      <GoogleSignIn onCredential={onGoogle} onError={() => setFormError('Không thể đăng ký bằng Google. Vui lòng thử lại.')} />
+      <SocialSignIn mode="signup" onGoogle={social(loginWithGoogle)} onFacebook={social(loginWithFacebook)} onError={setFormError} />
       <Divider>hoặc dùng email</Divider>
       <form onSubmit={onSubmit} noValidate className="space-y-4">
         <TextField label="Họ và tên" autoComplete="name" placeholder="Nguyễn Văn An" autoFocus error={errors.full_name?.message} {...register('full_name')} />

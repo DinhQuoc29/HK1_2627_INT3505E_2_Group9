@@ -21,18 +21,33 @@ cd apps/backend/src && uvicorn app:create_app --factory --port 5000 --reload
 - Health check: `GET /healthz`
 - Tài liệu API là `openapi.yaml` viết trước (design-first); trang `/docs` tự sinh của FastAPI được tắt để chỉ có một nguồn sự thật. `tests/test_openapi_contract.py` đảm bảo route trong code khớp spec.
 
+## Bật đăng nhập Google / Facebook
+- **Google:** Google Cloud Console → APIs & Services → Credentials → OAuth client ID (Web), Authorized JavaScript origins `http://localhost:5173`. Điền `GOOGLE_CLIENT_ID` (`.env` gốc) và `VITE_GOOGLE_CLIENT_ID` (`apps/web/.env`).
+- **Facebook:** Meta for Developers → tạo app, thêm sản phẩm *Facebook Login* (Web), `http://localhost:5173` làm site URL/domain. Điền `FACEBOOK_APP_ID` và `FACEBOOK_APP_SECRET` (`.env` gốc, secret chỉ ở server) và `VITE_FACEBOOK_APP_ID` (`apps/web/.env`). App ở chế độ Development thì chỉ tài khoản có vai trò trong app mới đăng nhập được.
+- Chưa cấu hình thì nút tương ứng bị mờ, backend trả 503 `…-unavailable`.
+- **Kiểm tra cấu hình thật:** sau khi điền ID/secret, chạy `.venv/bin/python scripts/check_social_config.py`. Script báo ✔/✘ từng mục (định dạng ID, `.env` backend khớp `apps/web/.env`, Google tải được chứng chỉ, Facebook xác nhận cặp App ID/Secret) mà không in bí mật.
+- **Lỗi thường gặp:** Google `origin_mismatch` → Authorized JavaScript origins phải đúng `http://localhost:5173` (không phải `127.0.0.1`); Facebook không mở được popup/báo thiếu quyền → app đang ở chế độ Development và tài khoản chưa được thêm vai trò, hoặc chưa thêm `http://localhost:5173/` vào "Miền được phép cho JavaScript SDK" (Facebook Login → Cài đặt, bật "Đăng nhập bằng JavaScript SDK"; không dùng App Domains vì Meta không nhận `localhost`); nút không phản ứng → chưa restart Vite sau khi sửa `apps/web/.env`.
+- Migration `002_add_facebook_identity_provider.sql` cho phép provider `facebook`. DB đang chạy từ trước: `docker exec -i ecommerce-db psql -U ecommerce -d ecommerce < apps/backend/migrations/002_add_facebook_identity_provider.sql`.
+
+## Tài khoản dev
+`.venv/bin/python scripts/seed_dev_user.py` tạo một buyer mẫu trong DB local (thông tin đăng nhập nằm ở đầu file script; chạy lại vẫn an toàn, từ chối nếu DB không phải local).
+
 ## Auth API (`/api/v1`)
 | Method | Path | Mô tả |
 | --- | --- | --- |
 | POST | `/users` | Đăng ký buyer (kèm mở phiên) |
-| GET | `/users/me` | Hồ sơ người đang đăng nhập |
+| GET | `/users/me` | Hồ sơ người đang đăng nhập (kèm `providers`, `has_password`) |
+| POST | `/users/me/identities` | Liên kết Google hoặc Facebook với người dùng đang đăng nhập |
+| DELETE | `/users/me/identities/{provider}` | Hủy liên kết (không cho khi đó là cách đăng nhập duy nhất) |
 | POST | `/auth/sessions` | Đăng nhập email/mật khẩu (sai 5 lần liên tiếp thì khóa 15 phút) |
 | POST | `/auth/sessions/google` | Đăng nhập Google (ID token) |
+| POST | `/auth/sessions/facebook` | Đăng nhập/đăng ký Facebook (access token; không tự gộp vào tài khoản trùng email) |
 | POST | `/auth/tokens` | Đổi refresh token (cookie HttpOnly) lấy access token mới, có xoay vòng |
 | DELETE | `/auth/sessions/current` | Đăng xuất, thu hồi phiên ngay |
 
 Access token JWT 15 phút (claim `sid` trỏ `auth_sessions`, mỗi request kiểm tra phiên còn hiệu lực).
 Lỗi trả `application/problem+json`. Mật khẩu băm bcrypt; refresh token chỉ lưu SHA-256.
+Đăng ký/đăng nhập bị giới hạn `RATE_LIMIT_PER_MINUTE` request mỗi IP mỗi phút (429 + `Retry-After`; bộ nhớ trong tiến trình).
 
 ## Entity
 - `src/accounts/model.py`: User, UserIdentity, AuthSession, PrivacySettings

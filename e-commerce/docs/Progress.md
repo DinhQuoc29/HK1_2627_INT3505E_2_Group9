@@ -24,16 +24,21 @@ Cập nhật: 24/11/2026 · Nhánh: `feature/auth-login-register`
   - `GET /users/me`: hồ sơ người dùng đang đăng nhập.
   - `POST /auth/sessions`: đăng nhập.
   - `POST /auth/sessions/google`: đăng nhập Google.
+  - `POST /auth/sessions/facebook`: đăng nhập/đăng ký Facebook (xác minh token qua Graph API `debug_token`; không tự gộp vào tài khoản trùng email).
   - `POST /auth/tokens`: làm mới token.
   - `DELETE /auth/sessions/current`: đăng xuất.
+  - `POST /users/me/identities`, `DELETE /users/me/identities/{provider}`: liên kết / hủy liên kết Google, Facebook khi đã đăng nhập (SPEC-01).
 - Access token JWT 15 phút, claim `sid` trỏ tới `auth_sessions`; mỗi request kiểm tra phiên còn hiệu lực nên đăng xuất có hiệu lực ngay.
 - Refresh token ngẫu nhiên, DB chỉ lưu SHA-256, nằm trong cookie HttpOnly và được xoay vòng.
 - Mật khẩu băm bcrypt. Sai 5 lần liên tiếp thì khóa 15 phút (429 + `Retry-After`).
 - Google: xác minh ID token, liên kết theo `(google, sub)` hoặc theo email đã xác minh; Google không phản hồi thì 503 và không tạo phiên hay tài khoản.
+- Luồng đăng nhập thật được kiểm thử bằng token Google ký cục bộ (chữ ký, audience, issuer, hạn dùng) và Graph API giả cho Facebook; `scripts/check_social_config.py` kiểm tra cấu hình thật khi có ID/secret.
+- Giới hạn tốc độ đăng ký/đăng nhập theo IP (429 + `Retry-After`).
 - Lỗi thống nhất `application/problem+json`; cấu hình qua biến môi trường; log dạng JSON; `GET /healthz`.
 
 ### Frontend (React + TypeScript + Vite + Tailwind)
-- Trang Đăng ký, Đăng nhập, trang tài khoản và route guard. Giao diện sáng, tiếng Việt, tự chuyển tối theo hệ điều hành.
+- Trang Đăng ký, Đăng nhập, trang tài khoản (xem, liên kết/hủy liên kết Google) và route guard.
+- Tự làm mới access token khi hết hạn và gọi lại yêu cầu; phiên hết hạn hẳn thì về trang đăng nhập kèm thông báo. Giao diện sáng, tiếng Việt, tự chuyển tối theo hệ điều hành.
 - Kiểm tra form bằng zod (khớp quy tắc backend), hiện lỗi 422/409/401/429/503 đúng chỗ, checklist mật khẩu theo thời gian thực.
 - Access token chỉ giữ trong bộ nhớ; khôi phục phiên khi tải lại trang bằng cookie refresh.
 
@@ -47,8 +52,8 @@ Cập nhật: 24/11/2026 · Nhánh: `feature/auth-login-register`
 
 | Phần | Kết quả |
 | --- | --- |
-| Backend (`pytest`, DB thật) | 29 test qua: đăng ký, đăng nhập, khóa tài khoản, refresh xoay vòng, đăng xuất, phân quyền, Google (giả lập), đồng bộ schema, hợp đồng OpenAPI |
-| Frontend (`vitest`) | 25 test qua: schema form, thông báo lỗi, luồng đăng nhập/đăng ký, route guard, refresh chỉ gọi một lần |
+| Backend (`pytest`, DB thật) | 61 test qua: đăng ký, đăng nhập, khóa tài khoản, refresh xoay vòng, đăng xuất, phân quyền, Google (giả lập), đồng bộ schema, hợp đồng OpenAPI |
+| Frontend (`vitest`) | 39 test qua: schema form, thông báo lỗi, luồng đăng nhập/đăng ký, route guard, refresh chỉ gọi một lần |
 | Typecheck và build | `tsc` và `vite build` sạch |
 | Thử trên trình duyệt | Đăng ký → vào trang tài khoản → tải lại vẫn giữ phiên → đăng xuất thì phiên bị thu hồi trong DB |
 
@@ -56,8 +61,8 @@ Cập nhật: 24/11/2026 · Nhánh: `feature/auth-login-register`
 
 - Cài đặt backend cho Checkout, Orders, Payments, Inventory, Reviews (đã có entity và spec).
 - Giao diện cho giỏ hàng, đơn hàng, đánh giá.
-- Đăng nhập Google chưa thử với Google thật (cần Client ID, xem mục 5).
-- Quên mật khẩu; giới hạn tốc độ theo IP (hiện chỉ khóa theo tài khoản).
+- Đăng nhập Google và Facebook chưa thử với nhà cung cấp thật (cần Client ID / Facebook App ID, xem mục 5).
+- Quên mật khẩu, đổi mật khẩu, xác minh email: thiết kế DB hiện chưa có bảng cho các luồng này nên chưa làm.
 - Mock server cho OpenAPI. Có thể chạy thủ công: `npx @stoplight/prism-cli mock apps/backend/openapi.yaml -p 4010`.
 - Chưa có view hợp đồng đọc và phần lớn index tìm kiếm của `products`/`orders` trong migration.
 
@@ -73,7 +78,8 @@ Cập nhật: 24/11/2026 · Nhánh: `feature/auth-login-register`
 
 - Backend, DB và migration: xem `apps/backend/README.md`.
 - Frontend: xem `apps/web/README.md`.
-- Bật đăng nhập Google: tạo OAuth Client ID (Web), thêm `http://localhost:5173` vào Authorized JavaScript origins, điền `GOOGLE_CLIENT_ID` trong `.env` gốc và `VITE_GOOGLE_CLIENT_ID` trong `apps/web/.env`.
+- Bật đăng nhập Google/Facebook: xem mục "Bật đăng nhập Google / Facebook" trong `apps/backend/README.md`.
+- Quyết định thiết kế đã đổi so với bản DB v1.1: `user_identities.provider` cho phép thêm `facebook` (migration 002); cần báo nhóm.
 
 ## 6. Kế hoạch tiếp theo
 
