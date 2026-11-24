@@ -1,0 +1,11 @@
+# Dữ liệu: quá nặng cho git, mỗi người tự tải / nhận qua Drive (xem data/README.md)
+data/*
+!data/README.md
+
+# Kết quả sinh ra khi chạy notebook (chạy lại là có)
+artifacts/
+
+# File tạm
+duckdb_tmp/
+.ipynb_checkpoints/
+__pycache__/
