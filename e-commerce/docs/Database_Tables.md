@@ -278,3 +278,162 @@ Khi tạo đánh giá, service tra đơn hàng từ order\_item\_id. Chỉ cho p
 | created\_at | TIMESTAMPTZ | không | now() |  | Thời điểm tạo (UTC) |  |
 | updated\_at | TIMESTAMPTZ | không | now() |  | Thời điểm sửa gần nhất (ORM onupdate) |  |
 
+### **Privacy**
+
+#### **privacy_settings**
+
+Tùy chọn cá nhân hóa gắn với tài khoản; tạo khi đăng ký. **Mức:** P1. **REQ:** PRV-1.
+
+| Cột | Kiểu | Null | Default | Khóa/ràng buộc | Mô tả | REQ |
+| :-- | :-- | :-- | :-- | :-- | :-- | :-- |
+| user\_id | UUID | không |   | PK; FK → users.id (CASCADE) | Tài khoản | PRV-1 |
+| personalization\_enabled | BOOLEAN | không | TRUE |   | FALSE: không ghi event hành vi, không dùng lịch sử để gợi ý | PRV-1 |
+| updated\_at | TIMESTAMPTZ | không | now() |   | Thời điểm sửa gần nhất (ORM onupdate) |   |
+
+### **Behavior Events**
+
+#### **behavior_events**
+
+Log hành vi chỉ ghi thêm (append-only); không FK sang OLTP. **Mức:** P1. **REQ:** EVT-1, EVT-2, ĐB-EVT10.
+
+| Cột | Kiểu | Null | Default | Khóa/ràng buộc | Mô tả | REQ |
+| :-- | :-- | :-- | :-- | :-- | :-- | :-- |
+| id | BIGINT | không |   | PK; identity | Khóa nội bộ, không lộ ra API | EVT-1 |
+| client\_event\_id | UUID | không |   | UNIQUE | Mã event do client (hoặc server) sinh; chống trùng | EVT-1 (chống trùng theo mã event) |
+| event\_type | TEXT | không |   | CHECK (event\_type IN ('click','product\_view','search','filter','impression','view\_review','add\_to\_cart','remove\_from\_cart','purchase')) | Loại event; repeat\_purchase = purchase có is\_repeat = TRUE | ĐB-EVT10 |
+| user\_id | UUID | có |   |   | NULL nếu khách chưa đăng nhập | EVT-1 |
+| session\_id | UUID | không |   |   | UUID ngẫu nhiên do FE sinh (header X-Session-Id); không phải fingerprint | EVT-1 |
+| product\_id | UUID | có |   |   | Sản phẩm liên quan | EVT-1 |
+| category\_id | UUID | có |   |   | Danh mục (filter/category view) | ĐB-EVT10 |
+| order\_id | UUID | có |   |   | Đơn (purchase) | ĐB-EVT10 |
+| rec\_request\_id | UUID | có |   |   | Mã lượt gợi ý sinh ra impression/click | EVT-2 (gắn với mã lượt gợi ý) |
+| search\_event\_id | UUID | có |   |   | client\_event\_id của event search dẫn tới click này | ĐB-EVT10 (sp bấm sau khi tìm) |
+| placement | TEXT | có |   | CHECK (placement IN ('home','similar','popular','new\_user','search','category','cart','product\_detail','other')) | Khối hiển thị nơi xảy ra impression/click | EVT-2 (CTR) |
+| position | SMALLINT | có |   | CHECK (position \>= 0) | Vị trí trong danh sách | EVT-2 |
+| search\_query | VARCHAR(200) | có |   |   | Từ khóa (search) | ĐB-EVT10 |
+| filters | JSONB | có |   |   | Bộ lọc đã chọn (giá, thương hiệu, tỉnh, sao) | ĐB-EVT10 |
+| dwell\_ms | INTEGER | có |   | CHECK (dwell\_ms \>= 0) | Thời gian ở trang chi tiết (product\_view) | ĐB-EVT10 |
+| quantity | INTEGER | có |   | CHECK (quantity \> 0) | Số lượng (cart, purchase) | ĐB-EVT10 |
+| unit\_price | BIGINT | có |   | CHECK (unit\_price \> 0) | Đơn giá (cart, purchase) | ĐB-EVT10 |
+| is\_repeat | BOOLEAN | có |   |   | purchase: buyer đã từng mua sản phẩm này | ĐB-EVT10 (repeat\_purchase) |
+| occurred\_at | TIMESTAMPTZ | không |   |   | Thời điểm xảy ra (client) hoặc commit (server) | EVT-1 |
+| received\_at | TIMESTAMPTZ | không | now() |   | Thời điểm server nhận | EVT-1 |
+
+> * ck\_events\_product\_required CHECK (event\_type NOT IN ('click','product\_view','impression','view\_review','add\_to\_cart','remove\_from\_cart','purchase') OR product\_id IS NOT NULL)  
+> * ck\_events\_search CHECK (event\_type \<\> 'search' OR search\_query IS NOT NULL)  
+> * ck\_events\_filter CHECK (event\_type \<\> 'filter' OR category\_id IS NOT NULL OR filters IS NOT NULL)  
+> * ck\_events\_cart CHECK (event\_type NOT IN ('add\_to\_cart','remove\_from\_cart') OR (quantity IS NOT NULL AND user\_id IS NOT NULL))  
+> * ck\_events\_purchase CHECK (event\_type \<\> 'purchase' OR (order\_id IS NOT NULL AND user\_id IS NOT NULL AND quantity IS NOT NULL AND unit\_price IS NOT NULL AND is\_repeat IS NOT NULL))  
+> * ck\_events\_dwell CHECK (dwell\_ms IS NULL OR event\_type = 'product\_view')  
+
+### **Popular & Fallback**
+
+#### **product_daily_stats**
+
+Số liệu theo ngày (UTC) cho từng sản phẩm; job upsert. **Mức:** P1. **REQ:** POP-1.
+
+| Cột | Kiểu | Null | Default | Khóa/ràng buộc | Mô tả | REQ |
+| :-- | :-- | :-- | :-- | :-- | :-- | :-- |
+| product\_id | UUID | không |   |   | Sản phẩm | POP-1 |
+| stat\_date | DATE | không |   |   | Ngày (UTC) | POP-1 |
+| view\_count | INTEGER | không | 0 |   | Số product\_view | POP-1 (view) |
+| unique\_viewers | INTEGER | không | 0 |   | Số người xem khác nhau trong ngày (user\_id, hoặc session\_id nếu là khách) | POP-1 (giảm tương tác lặp) |
+| click\_count | INTEGER | không | 0 |   | Số click | POP-1 (click) |
+| add\_to\_cart\_count | INTEGER | không | 0 |   | Số add\_to\_cart | POP-1 (add-to-cart) |
+| order\_count | INTEGER | không | 0 |   | Số đơn hợp lệ (paid/shipping/completed) chứa sản phẩm, theo ngày paid\_at | POP-1 (chỉ tính giao dịch hợp lệ) |
+| units\_sold | INTEGER | không | 0 |   | Số lượng bán trong các đơn đó | POP-1 (số lượng bán) |
+| updated\_at | TIMESTAMPTZ | không | now() |   | Thời điểm sửa gần nhất (ORM onupdate) |   |
+
+> * pk\_product\_daily\_stats PRIMARY KEY (product\_id, stat\_date)  
+> * ck\_product\_daily\_stats\_nonneg CHECK (view\_count \>= 0 AND unique\_viewers \>= 0 AND click\_count \>= 0 AND add\_to\_cart\_count \>= 0 AND order\_count \>= 0 AND units\_sold \>= 0)  
+
+#### **product_popularity**
+
+Chỉ số phổ biến 30 ngày và điểm có time decay; danh sách tính trước cho tab Phổ biến, người mới, fallback; đồng thời là feature sản phẩm cho ML. **Mức:** P1. **REQ:** POP-1, POP-2, ĐB-NEW20.
+
+| Cột | Kiểu | Null | Default | Khóa/ràng buộc | Mô tả | REQ |
+| :-- | :-- | :-- | :-- | :-- | :-- | :-- |
+| product\_id | UUID | không |   | PK | Sản phẩm | POP-1 |
+| views\_30d | INTEGER | không | 0 |   | Tổng view 30 ngày | POP-1 |
+| unique\_viewers\_30d | INTEGER | không | 0 |   | Tổng unique viewers theo ngày (cộng dồn) | POP-1 |
+| clicks\_30d | INTEGER | không | 0 |   | Tổng click | POP-1 |
+| add\_to\_cart\_30d | INTEGER | không | 0 |   | Tổng add-to-cart | POP-1 |
+| orders\_30d | INTEGER | không | 0 |   | Tổng đơn hợp lệ | POP-1 |
+| units\_sold\_30d | INTEGER | không | 0 |   | Tổng số lượng bán | POP-1 |
+| add\_to\_cart\_rate | DOUBLE PRECISION | không | 0 |   | add\_to\_cart\_30d / max(views\_30d, 1) | POP-1 |
+| conversion\_rate | DOUBLE PRECISION | không | 0 |   | orders\_30d / max(views\_30d, 1) | POP-1 |
+| rating\_avg | NUMERIC(3,2) | không | 0 |   | Snapshot từ products lúc tính | POP-1 |
+| rating\_count | INTEGER | không | 0 |   | Snapshot từ products lúc tính | POP-1 |
+| score | DOUBLE PRECISION | không |   |   | Điểm phổ biến có time decay (công thức ở thẻ Nghiệp vụ) | POP-1 (time decay) |
+| computed\_at | TIMESTAMPTZ | không |   |   | Lần tính gần nhất | POP-2 |
+
+### **Recommendation & Budget**
+
+#### **user_recommendations**
+
+Top-K ứng viên mỗi user do pipeline offline tính sẵn; API lọc ngân sách/tồn kho lúc trả. **Mức:** P1. **REQ:** REC-1, Q02.
+
+| Cột | Kiểu | Null | Default | Khóa/ràng buộc | Mô tả | REQ |
+| :-- | :-- | :-- | :-- | :-- | :-- | :-- |
+| user\_id | UUID | không |   |   | User | REC-1 |
+| product\_id | UUID | không |   |   | Sản phẩm ứng viên | REC-1 |
+| rank | SMALLINT | không |   | CHECK (rank \>= 1) | Thứ hạng do model xếp | REC-1 |
+| score | DOUBLE PRECISION | không |   |   | Điểm model | REC-1 |
+| model\_version | VARCHAR(50) | không |   |   | Phiên bản model sinh kết quả | Q06 |
+| generated\_at | TIMESTAMPTZ | không |   |   | Thời điểm batch chạy; quá cũ → fallback stale\_model | POP-2 |
+
+> * pk\_user\_recommendations PRIMARY KEY (user\_id, product\_id)  
+> * uq\_user\_recommendations\_rank UNIQUE (user\_id, rank)  
+
+#### **product_similarities**
+
+Danh sách 'Sản phẩm tương tự' tính sẵn; không cá nhân hóa. **Mức:** P1. **REQ:** ĐB-SIM.
+
+| Cột | Kiểu | Null | Default | Khóa/ràng buộc | Mô tả | REQ |
+| :-- | :-- | :-- | :-- | :-- | :-- | :-- |
+| product\_id | UUID | không |   |   | Sản phẩm gốc | ĐB-SIM |
+| similar\_product\_id | UUID | không |   |   | Sản phẩm tương tự | ĐB-SIM |
+| rank | SMALLINT | không |   | CHECK (rank \>= 1) | Thứ hạng | ĐB-SIM |
+| score | DOUBLE PRECISION | không |   |   | Độ tương tự | ĐB-SIM |
+| model\_version | VARCHAR(50) | không |   |   | Phiên bản model | Q06 |
+| generated\_at | TIMESTAMPTZ | không |   |   | Thời điểm batch chạy | ĐB-SIM |
+
+> * pk\_product\_similarities PRIMARY KEY (product\_id, similar\_product\_id)  
+> * uq\_product\_similarities\_rank UNIQUE (product\_id, rank)  
+> * ck\_product\_similarities\_self CHECK (product\_id \<\> similar\_product\_id)  
+
+#### **recommendation_requests**
+
+Log mỗi lượt trả gợi ý/phổ biến: nguồn model hay popular, lý do fallback, độ trễ; id gắn vào impression/click. **Mức:** P1. **REQ:** EVT-2, Q04, Q05.
+
+| Cột | Kiểu | Null | Default | Khóa/ràng buộc | Mô tả | REQ |
+| :-- | :-- | :-- | :-- | :-- | :-- | :-- |
+| id | UUID | không |   | PK | UUIDv7 = rec\_request\_id trả cho FE | EVT-2 |
+| user\_id | UUID | có |   |   | NULL nếu khách | EVT-2 |
+| session\_id | UUID | có |   |   | Phiên FE | EVT-2 |
+| placement | TEXT | không |   | CHECK (placement IN ('home','similar','popular','new\_user')) | Khối gợi ý | EVT-2 |
+| context\_product\_id | UUID | có |   |   | Sản phẩm gốc (placement = similar) | ĐB-SIM |
+| max\_price | BIGINT | có |   | CHECK (max\_price \> 0) | Ngân sách user nhập (trần giá mỗi sản phẩm) | REC-2, Q04 |
+| source | TEXT | không |   | CHECK (source IN ('model','popular')) | Kết quả lấy từ model hay danh sách phổ biến | Q05 (ghi nguồn kết quả) |
+| fallback\_reason | TEXT | có |   | CHECK (fallback\_reason IN ('cold\_start','personalization\_off','guest','model\_error','timeout','stale\_model')) | Lý do dùng popular thay model (chỉ với home/similar) | POP-2, Q05 |
+| model\_version | VARCHAR(50) | có |   |   | Phiên bản model (khi source = model) | Q03, Q06 |
+| requested\_count | SMALLINT | không |   | CHECK (requested\_count \> 0) | Số sản phẩm yêu cầu | REC (thiếu ứng viên trả ít hơn) |
+| returned\_count | SMALLINT | không |   | CHECK (returned\_count \>= 0) | Số sản phẩm thực trả | Q04 (tỷ lệ có kết quả) |
+| latency\_ms | INTEGER | không |   | CHECK (latency\_ms \>= 0) | Độ trễ xử lý | Q02 |
+| created\_at | TIMESTAMPTZ | không | now() |   | Thời điểm tạo (UTC) |   |
+
+> * ck\_rec\_requests\_fallback CHECK (fallback\_reason IS NULL OR source = 'popular')  
+
+#### **recommendation_items**
+
+Các sản phẩm đã trả trong một lượt gợi ý, kèm giá tại thời điểm trả. **Mức:** P1. **REQ:** Q04, EVT-2.
+
+| Cột | Kiểu | Null | Default | Khóa/ràng buộc | Mô tả | REQ |
+| :-- | :-- | :-- | :-- | :-- | :-- | :-- |
+| request\_id | UUID | không |   | FK → recommendation\_requests.id (CASCADE) | Lượt gợi ý (FK cùng module; xóa log cũ thì xóa theo) | EVT-2 |
+| rank | SMALLINT | không |   | CHECK (rank \>= 1) | Vị trí hiển thị | EVT-2 |
+| product\_id | UUID | không |   |   | Sản phẩm | EVT-2 |
+| score | DOUBLE PRECISION | có |   |   | Điểm model hoặc điểm popular | Q03 |
+| price\_at\_time | BIGINT | không |   | CHECK (price\_at\_time \> 0) | Giá lúc trả; dùng đo Budget Violation Rate | Q04 (ghi thời điểm giá) |
+
+> * pk\_recommendation\_items PRIMARY KEY (request\_id, rank)  
