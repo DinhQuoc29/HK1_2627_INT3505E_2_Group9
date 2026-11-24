@@ -9,12 +9,13 @@ type AuthState = {
   /** Thông báo hiển thị ở trang đăng nhập (vd phiên hết hạn). */
   notice: string | null
   clearNotice: () => void
+  refreshUser: () => Promise<void>
   linkIdentity: (provider: Provider, credential: string) => Promise<void>
   unlinkIdentity: (provider: Provider) => Promise<void>
-  register: (b: { email: string; password: string; full_name: string }) => Promise<void>
-  login: (b: { email: string; password: string }) => Promise<void>
-  loginWithGoogle: (credential: string) => Promise<void>
-  loginWithFacebook: (accessToken: string) => Promise<void>
+  register: (b: { email: string; password: string; full_name: string }) => Promise<User>
+  login: (b: { email: string; password: string }) => Promise<User>
+  loginWithGoogle: (credential: string) => Promise<User>
+  loginWithFacebook: (accessToken: string) => Promise<User>
   logout: () => Promise<void>
 }
 
@@ -25,11 +26,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
-  const accept = useCallback((p: AuthPayload) => {
+  const accept = useCallback((p: AuthPayload): User => {
     setAccessToken(p.access_token)
     setUser(p.user)
     setStatus('authenticated')
     setNotice(null)
+    return p.user
   }, [])
 
   // Phiên hết hạn hoặc bị thu hồi giữa chừng: đưa về trạng thái chưa đăng nhập kèm thông báo.
@@ -56,11 +58,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true }
   }, [accept])
 
+  // Ổn định danh tính hàm để dùng an toàn trong dependency của useEffect (tránh vòng lặp tải lại vô hạn).
+  const refreshUser = useCallback(async () => { setUser(await api.me()) }, [])
+
   const value = useMemo<AuthState>(() => ({
     status,
     user,
     notice,
     clearNotice: () => setNotice(null),
+    refreshUser,
     linkIdentity: async (p, c) => { setUser(await api.linkIdentity(p, c)) },
     unlinkIdentity: async (p) => { await api.unlinkIdentity(p); setUser(await api.me()) },
     register: async (b) => accept(await api.register(b)),
@@ -74,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatus('anonymous')
       }
     },
-  }), [status, user, notice, accept])
+  }), [status, user, notice, accept, refreshUser])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

@@ -7,6 +7,14 @@ export function describeError(err: unknown): Described {
   if (!(err instanceof ApiError)) return { message: 'Đã có lỗi xảy ra, vui lòng thử lại.', fields: [] }
   if (err.status === 422 && err.errors.length) return { fields: err.errors }
   if (err.slug === 'email-already-registered') return { fields: [{ field: 'email', message: 'Email này đã được đăng ký.' }] }
+  if (err.slug === 'account-suspended') return { message: 'Tài khoản của bạn đã bị tạm khóa. Vui lòng liên hệ quản trị viên.', fields: [] }
+  if (err.slug === 'email-not-verified') return { message: 'Hãy xác minh email trước khi đăng ký bán hàng.', fields: [] }
+  if (err.slug === 'application-pending') return { message: 'Bạn đã có hồ sơ đang chờ duyệt.', fields: [] }
+  if (err.slug === 'application-not-pending') return { message: 'Hồ sơ này đã được xử lý trước đó.', fields: [] }
+  if (err.slug === 'invalid-email-token') return { message: 'Liên kết xác minh không hợp lệ hoặc đã hết hạn.', fields: [] }
+  if (err.slug === 'invalid-reset-token') return { message: 'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.', fields: [] }
+  if (err.slug === 'email-already-verified') return { message: 'Email của bạn đã được xác minh.', fields: [] }
+  if (err.slug === 'shop-already-exists') return { message: 'Bạn đã có shop rồi.', fields: [] }
   if (err.slug === 'rate-limited') {
     return { message: `Bạn thao tác quá nhanh. Vui lòng thử lại sau ${err.retryAfter ?? 60} giây.`, fields: [] }
   }

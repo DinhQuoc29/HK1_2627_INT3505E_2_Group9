@@ -8,7 +8,7 @@ from openapi_spec_validator import validate
 from app import create_app
 
 SPEC_PATH = pathlib.Path(__file__).resolve().parent.parent / "openapi.yaml"
-IMPLEMENTED_TAGS = {"users", "auth"}  # thêm tag vào đây khi cài đặt xong module tương ứng
+IMPLEMENTED_TAGS = {"users", "auth", "shops", "admin", "sellers"}  # thêm tag vào đây khi cài đặt xong module tương ứng
 HTTP = {"get", "post", "put", "patch", "delete"}
 
 

@@ -7,9 +7,11 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
 
 import accounts.model  # noqa: F401  (đăng ký model)
+import sellers.model  # noqa: F401
 from common.errors import register_error_handlers
 from common.ratelimit import SlidingWindowLimiter
 from config import Settings
+from mailer import build_mailer
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -42,11 +44,18 @@ def create_app(**overrides) -> FastAPI:
     app = FastAPI(title="E-commerce API", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.settings = settings
     app.state.limiter = SlidingWindowLimiter()
+    app.state.mailer = build_mailer(settings)
     register_error_handlers(app)
 
     from accounts.routes import router as accounts_router
 
     app.include_router(accounts_router)
+    from catalog.routes import router as catalog_router
+
+    app.include_router(catalog_router)
+    from sellers.routes import router as sellers_router
+
+    app.include_router(sellers_router)
 
     @app.get("/healthz", include_in_schema=False)
     def healthz():
