@@ -1,0 +1,11 @@
+artifacts/*
+!artifacts/.gitkeep
+reports/runs/
+data/catalog*
+data/prepared/
+data/labeling/
+*.egg-info/
+__pycache__/
+.ipynb_checkpoints/
+.venv*/
+.model-cache/

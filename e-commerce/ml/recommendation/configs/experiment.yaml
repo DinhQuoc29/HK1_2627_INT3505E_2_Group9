@@ -1,0 +1,35 @@
+seed: 42
+catalog_path: /kaggle/input/soa-ml-workspace/catalog.json
+data_dir: data
+output_dir: /kaggle/working/fashion-reco
+mode: research
+methods:
+- tfidf
+- bm25
+- e5
+- bge
+candidate_pool_size: 60
+candidate_per_slot: 20
+top_k: 5
+dense:
+  device: cpu
+  batch_size: 8
+  max_length: 256
+  models:
+    e5: intfloat/multilingual-e5-base
+    bge: BAAI/bge-m3
+  revisions:
+    e5: d128750597153bb5987e10b1c3493a34e5a4502a
+    bge: 5617a9f61b028005a4858fdac845db406aefb181
+ranker:
+  num_leaves:
+  - 7
+  - 15
+  min_child_samples:
+  - 10
+  - 20
+  learning_rate:
+  - 0.03
+  - 0.05
+  n_estimators: 500
+  early_stopping_rounds: 30

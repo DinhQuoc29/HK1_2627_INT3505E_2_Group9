@@ -1,0 +1,15 @@
+{
+  "id": "charlotte4306/soa-fashion-recommendation-experiments",
+  "title": "SOA Fashion Recommendation Experiments",
+  "code_file": "run_experiment.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "charlotte4306/soa-ml-workspace"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}
