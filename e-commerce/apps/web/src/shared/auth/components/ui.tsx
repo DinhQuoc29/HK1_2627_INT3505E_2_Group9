@@ -80,6 +80,22 @@ export const TextField = forwardRef<HTMLInputElement, FieldProps>(function TextF
   )
 })
 
+type SelectProps = { label: string; error?: string; options: { value: string; label: string }[]; placeholder?: string } & React.SelectHTMLAttributes<HTMLSelectElement>
+
+export const SelectField = forwardRef<HTMLSelectElement, SelectProps>(function SelectField({ label, error, options, placeholder, className, ...p }, ref) {
+  const id = useId()
+  return (
+    <div className={className}>
+      <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">{label}</label>
+      <select id={id} ref={ref} aria-invalid={!!error} aria-describedby={error ? `${id}-err` : undefined} className={inputClass(!!error)} {...p}>
+        <option value="">{placeholder ?? 'Chọn…'}</option>
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+      {error && <p id={`${id}-err`} className="mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p>}
+    </div>
+  )
+})
+
 type PasswordProps = FieldProps & { showRules?: boolean; value?: string }
 
 export const PasswordField = forwardRef<HTMLInputElement, PasswordProps>(function PasswordField(
