@@ -1,68 +1,92 @@
-"""Schema (Marshmallow) cho request/response của Accounts. Field nhạy cảm không bao giờ ra API."""
-from marshmallow import Schema, ValidationError, fields, validate, validates, pre_load
+"""Schema (Pydantic) cho request/response của Accounts. Field nhạy cảm không bao giờ ra API."""
+import re
+import uuid
+from datetime import datetime
 
-from common.errors import ProblemError
+from pydantic import BaseModel, ConfigDict, field_validator
 
-
-def _password_rules(value: str):
-    if len(value.encode("utf-8")) > 72:  # giới hạn của bcrypt
-        raise ValidationError("Mật khẩu tối đa 72 byte.")
-    if not (any(c.isalpha() for c in value) and any(c.isdigit() for c in value)):
-        raise ValidationError("Mật khẩu cần có cả chữ và số.")
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
-class _EmailMixin:
-    @pre_load
-    def _normalize_email(self, data, **_):
-        if isinstance(data, dict) and isinstance(data.get("email"), str):
-            data = {**data, "email": data["email"].strip().lower()}
-        return data
+def _normalize_email(value):
+    if not isinstance(value, str):
+        raise ValueError("Email không hợp lệ.")
+    value = value.strip().lower()
+    if len(value) > 255 or not _EMAIL_RE.match(value):
+        raise ValueError("Email không hợp lệ.")
+    return value
 
 
-class RegisterSchema(_EmailMixin, Schema):
-    email = fields.Email(required=True, validate=validate.Length(max=255))
-    password = fields.Str(required=True, validate=[validate.Length(min=8, max=128), _password_rules])
-    full_name = fields.Str(required=True)
-
-    @pre_load
-    def _strip_name(self, data, **_):
-        if isinstance(data, dict) and isinstance(data.get("full_name"), str):
-            data = {**data, "full_name": data["full_name"].strip()}
-        return data
-
-    @validates("full_name")
-    def _name_len(self, value, **_):
-        if not 1 <= len(value) <= 100:
-            raise ValidationError("Họ tên từ 1 đến 100 ký tự.")
+class _Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
 
-class LoginSchema(_EmailMixin, Schema):
-    email = fields.Email(required=True)
-    password = fields.Str(required=True, validate=validate.Length(min=1, max=128))
+class RegisterRequest(_Strict):
+    email: str
+    password: str
+    full_name: str
+
+    _email = field_validator("email", mode="before")(_normalize_email)
+
+    @field_validator("password")
+    @classmethod
+    def _password_rules(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Mật khẩu tối thiểu 8 ký tự.")
+        if len(v.encode("utf-8")) > 72:  # giới hạn của bcrypt
+            raise ValueError("Mật khẩu tối đa 72 byte.")
+        if not (any(c.isalpha() for c in v) and any(c.isdigit() for c in v)):
+            raise ValueError("Mật khẩu cần có cả chữ và số.")
+        return v
+
+    @field_validator("full_name", mode="before")
+    @classmethod
+    def _name(cls, v):
+        if not isinstance(v, str):
+            raise ValueError("Họ tên không hợp lệ.")
+        v = v.strip()
+        if not 1 <= len(v) <= 100:
+            raise ValueError("Họ tên từ 1 đến 100 ký tự.")
+        return v
 
 
-class GoogleLoginSchema(Schema):
-    credential = fields.Str(required=True, validate=validate.Length(min=1, max=4096))
+class LoginRequest(_Strict):
+    email: str
+    password: str
+
+    _email = field_validator("email", mode="before")(_normalize_email)
+
+    @field_validator("password")
+    @classmethod
+    def _password_present(cls, v: str) -> str:
+        if not 1 <= len(v) <= 128:
+            raise ValueError("Vui lòng nhập mật khẩu.")
+        return v
 
 
-class UserSchema(Schema):
-    id = fields.UUID()
-    email = fields.Str()
-    full_name = fields.Str()
-    role = fields.Str()
-    created_at = fields.DateTime()
+class GoogleLoginRequest(_Strict):
+    credential: str
+
+    @field_validator("credential")
+    @classmethod
+    def _credential(cls, v: str) -> str:
+        if not 1 <= len(v) <= 4096:
+            raise ValueError("Credential không hợp lệ.")
+        return v
 
 
-def load_body(schema: Schema, data):
-    """Validate body; lỗi trả 422 problem+json kèm danh sách lỗi theo field."""
-    if not isinstance(data, dict):
-        raise ProblemError(400, "invalid-json", "Body phải là một JSON object.")
-    try:
-        return schema.load(data)
-    except ValidationError as exc:
-        errors = [
-            {"field": field, "message": msg}
-            for field, msgs in exc.normalized_messages().items()
-            for msg in (msgs if isinstance(msgs, list) else [str(msgs)])
-        ]
-        raise ProblemError(422, "validation-error", "Dữ liệu gửi lên không hợp lệ.", errors=errors)
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    email: str
+    full_name: str
+    role: str
+    created_at: datetime
+
+
+class AuthSessionOut(BaseModel):
+    access_token: str
+    token_type: str = "Bearer"
+    expires_in: int
+    user: UserOut

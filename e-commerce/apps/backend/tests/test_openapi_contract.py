@@ -19,15 +19,9 @@ def spec():
 
 @pytest.fixture(scope="module")
 def implemented():
-    app = create_app({"TESTING": True})
-    skip = {"/api/v1/docs", "/api/v1/openapi.yaml"}
-    return {
-        (m, r.rule.replace("<", "{").replace(">", "}"))
-        for r in app.url_map.iter_rules()
-        if r.rule.startswith("/api/v1/") and r.rule not in skip
-        for m in (x.lower() for x in r.methods)
-        if m in HTTP
-    }
+    # Route thật của ứng dụng (lấy từ lược đồ FastAPI sinh từ code, không phải openapi.yaml viết tay).
+    paths = create_app().openapi()["paths"]
+    return {(m, path) for path, item in paths.items() if path.startswith("/api/v1/") for m in item if m in HTTP}
 
 
 def _documented(spec, only_tags=None):

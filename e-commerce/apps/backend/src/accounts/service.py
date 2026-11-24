@@ -6,7 +6,6 @@ import logging
 from dataclasses import dataclass
 from datetime import timedelta
 
-from flask import current_app
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -14,6 +13,7 @@ from accounts import authentication as auth
 from accounts import repository
 from accounts.model import AuthSession, Role, User
 from common.errors import ProblemError
+from config import Settings
 from db import new_id
 from time_utils import utcnow
 
@@ -29,8 +29,7 @@ class IssuedSession:
     refresh_token: str
 
 
-def _open_session(s: Session, user: User) -> IssuedSession:
-    cfg = current_app.config
+def _open_session(s: Session, st: Settings, user: User) -> IssuedSession:
     refresh, refresh_hash = auth.new_refresh_token()
     session = repository.add_session(
         s,
@@ -38,13 +37,13 @@ def _open_session(s: Session, user: User) -> IssuedSession:
             id=new_id(),
             user_id=user.id,
             refresh_token_hash=refresh_hash,
-            expires_at=utcnow() + timedelta(days=cfg["REFRESH_TOKEN_DAYS"]),
+            expires_at=utcnow() + timedelta(days=st.refresh_token_days),
         ),
     )
-    return IssuedSession(user, auth.issue_access_token(user.id, session.id), refresh)
+    return IssuedSession(user, auth.issue_access_token(st, user.id, session.id), refresh)
 
 
-def register(s: Session, email: str, password: str, full_name: str) -> IssuedSession:
+def register(s: Session, st: Settings, email: str, password: str, full_name: str) -> IssuedSession:
     if repository.get_user_by_email(s, email):
         raise ProblemError(409, "email-already-registered", "Email này đã được đăng ký.")
     user = User(
@@ -56,11 +55,10 @@ def register(s: Session, email: str, password: str, full_name: str) -> IssuedSes
     except IntegrityError:  # hai request đăng ký trùng email chạy đồng thời
         raise ProblemError(409, "email-already-registered", "Email này đã được đăng ký.")
     log.info("user_registered user_id=%s", user.id)
-    return _open_session(s, user)
+    return _open_session(s, st, user)
 
 
-def login(s: Session, email: str, password: str) -> IssuedSession:
-    cfg = current_app.config
+def login(s: Session, st: Settings, email: str, password: str) -> IssuedSession:
     now = utcnow()
     user = repository.get_user_by_email(s, email)
     if user is None:
@@ -77,8 +75,8 @@ def login(s: Session, email: str, password: str) -> IssuedSession:
 
     if not auth.verify_password(password, user.password_hash):
         user.failed_login_count += 1
-        if user.failed_login_count >= cfg["LOGIN_MAX_FAILURES"]:
-            user.locked_until = now + timedelta(minutes=cfg["LOGIN_LOCK_MINUTES"])
+        if user.failed_login_count >= st.login_max_failures:
+            user.locked_until = now + timedelta(minutes=st.login_lock_minutes)
             user.failed_login_count = 0
             log.warning("account_locked user_id=%s", user.id)
         s.flush()
@@ -87,10 +85,10 @@ def login(s: Session, email: str, password: str) -> IssuedSession:
     user.failed_login_count = 0
     user.locked_until = None
     s.flush()
-    return _open_session(s, user)
+    return _open_session(s, st, user)
 
 
-def refresh(s: Session, refresh_token: str | None) -> IssuedSession:
+def refresh(s: Session, st: Settings, refresh_token: str | None) -> IssuedSession:
     """Xoay vòng refresh token: token cũ mất hiệu lực ngay khi cấp token mới."""
     if not refresh_token:
         raise ProblemError(401, "invalid-refresh-token", "Thiếu refresh token.")
@@ -102,16 +100,16 @@ def refresh(s: Session, refresh_token: str | None) -> IssuedSession:
     new_refresh, new_hash = auth.new_refresh_token()
     session.refresh_token_hash = new_hash
     s.flush()
-    return IssuedSession(user, auth.issue_access_token(user.id, session.id), new_refresh)
+    return IssuedSession(user, auth.issue_access_token(st, user.id, session.id), new_refresh)
 
 
 def logout(s: Session, sid) -> None:
     repository.revoke_session(s, sid, utcnow())
 
 
-def login_with_google(s: Session, credential: str) -> IssuedSession:
+def login_with_google(s: Session, st: Settings, credential: str) -> IssuedSession:
     try:
-        claims = auth.verify_google_id_token(credential)
+        claims = auth.verify_google_id_token(credential, st.google_client_id)
     except auth.GoogleUnavailable:
         log.error("google_unavailable")
         raise ProblemError(
@@ -137,4 +135,4 @@ def login_with_google(s: Session, credential: str) -> IssuedSession:
                 s, User(id=new_id(), email=email, full_name=name, password_hash=None, role=Role.BUYER.value)
             )
         repository.add_identity(s, user.id, "google", subject)
-    return _open_session(s, user)
+    return _open_session(s, st, user)

@@ -12,13 +12,14 @@ pytest apps/backend/tests       # kiểm tra entity với DB thật
 
 Reset DB (xóa dữ liệu, chạy lại migration): `docker compose down -v && docker compose up -d db`.
 
-## Chạy backend (Flask)
+## Chạy backend (FastAPI)
 ```bash
 # cần JWT_SECRET_KEY trong .env (>= 32 ký tự): python -c "import secrets; print(secrets.token_urlsafe(48))"
-cd apps/backend/src && flask --app app run --port 5000
+cd apps/backend/src && uvicorn app:create_app --factory --port 5000 --reload
 ```
 - Swagger UI: http://localhost:5000/api/v1/docs · đặc tả: `apps/backend/openapi.yaml`
 - Health check: `GET /healthz`
+- Tài liệu API là `openapi.yaml` viết trước (design-first); trang `/docs` tự sinh của FastAPI được tắt để chỉ có một nguồn sự thật. `tests/test_openapi_contract.py` đảm bảo route trong code khớp spec.
 
 ## Auth API (`/api/v1`)
 | Method | Path | Mô tả |
