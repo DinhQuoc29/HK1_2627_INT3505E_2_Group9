@@ -1,6 +1,15 @@
 /** Client gọi API /api/v1. Access token chỉ giữ trong bộ nhớ; refresh token là cookie HttpOnly. */
 
-export type User = { id: string; email: string; full_name: string; role: 'buyer' | 'seller' | 'admin'; created_at: string }
+export type User = {
+  id: string
+  email: string
+  full_name: string
+  role: 'buyer' | 'seller' | 'admin'
+  created_at: string
+  providers: string[] // nhà cung cấp OAuth đã liên kết
+  has_password: boolean // false: tài khoản chỉ đăng nhập bằng Google
+}
+export type Provider = 'google' | 'facebook'
 export type AuthPayload = { access_token: string; token_type: 'Bearer'; expires_in: number; user: User }
 export type FieldError = { field: string; message: string }
 
@@ -64,11 +73,36 @@ const refreshOnce = () => {
   return refreshInFlight
 }
 
+// AuthContext đăng ký để biết khi nào token được làm mới hoặc phiên hết hạn hẳn.
+type SessionHandlers = { onRefreshed: (p: AuthPayload) => void; onExpired: () => void }
+let handlers: SessionHandlers | null = null
+export const setSessionHandlers = (h: SessionHandlers | null) => { handlers = h }
+
+const RECOVERABLE = new Set(['token-expired', 'missing-token', 'invalid-token'])
+
+/** Gọi API cần đăng nhập: access token hết hạn (15 phút) thì tự refresh một lần rồi thử lại. */
+async function authed<T>(method: string, path: string, body?: unknown): Promise<T> {
+  try {
+    return await request<T>(method, path, body, true)
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.status !== 401) throw e
+    if (!RECOVERABLE.has(e.slug)) { handlers?.onExpired(); throw e } // vd phiên đã bị thu hồi
+    let payload: AuthPayload
+    try { payload = await refreshOnce() } catch { handlers?.onExpired(); throw e }
+    setAccessToken(payload.access_token)
+    handlers?.onRefreshed(payload)
+    return request<T>(method, path, body, true)
+  }
+}
+
 export const api = {
   register: (b: { email: string; password: string; full_name: string }) => request<AuthPayload>('POST', '/users', b),
   login: (b: { email: string; password: string }) => request<AuthPayload>('POST', '/auth/sessions', b),
   loginWithGoogle: (credential: string) => request<AuthPayload>('POST', '/auth/sessions/google', { credential }),
+  loginWithFacebook: (access_token: string) => request<AuthPayload>('POST', '/auth/sessions/facebook', { access_token }),
   refresh: refreshOnce,
   logout: () => request<null>('DELETE', '/auth/sessions/current', undefined, true),
-  me: () => request<User>('GET', '/users/me', undefined, true),
+  me: () => authed<User>('GET', '/users/me'),
+  linkIdentity: (provider: Provider, credential: string) => authed<User>('POST', '/users/me/identities', { provider, credential }),
+  unlinkIdentity: (provider: Provider) => authed<null>('DELETE', `/users/me/identities/${provider}`),
 }

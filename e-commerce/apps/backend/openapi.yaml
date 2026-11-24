@@ -52,6 +52,13 @@ paths:
                 detail: Email này đã được đăng ký.
                 instance: /api/v1/users
         '422': { $ref: '#/components/responses/ValidationProblem' }
+        '429':
+          description: Thao tác quá nhanh (`rate-limited`)
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
   /api/v1/users/me:
     get:
       tags: [users]
@@ -64,6 +71,68 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/User' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/users/me/identities:
+    post:
+      tags: [users]
+      summary: Liên kết tài khoản Google hoặc Facebook với người dùng đang đăng nhập
+      description: |
+        Mỗi người dùng liên kết tối đa một tài khoản cho mỗi nhà cung cấp, và mỗi tài khoản bên thứ ba chỉ thuộc một người dùng.
+        Nhà cung cấp không phản hồi trả 503 và không thay đổi gì. `credential` là ID token (Google) hoặc access token (Facebook).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, credential]
+              properties:
+                provider: { type: string, enum: [google, facebook] }
+                credential: { type: string, description: 'Google: ID token; Facebook: access token' }
+      responses:
+        '201':
+          description: Hồ sơ sau khi liên kết
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: '`provider-already-linked` (bạn đã liên kết nhà cung cấp này) hoặc `google-account-in-use` / `facebook-account-in-use` (tài khoản đó thuộc người khác)'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+        '503':
+          description: Không kết nối được Google (có thể thử lại)
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /api/v1/users/me/identities/{provider}:
+    delete:
+      tags: [users]
+      summary: Hủy liên kết một nhà cung cấp đăng nhập
+      description: Không cho hủy khi đó là cách đăng nhập duy nhất (không có mật khẩu và không còn nhà cung cấp nào khác) để không bị khóa khỏi tài khoản.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string, enum: [google, facebook] }
+      responses:
+        '204': { description: Đã hủy liên kết }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: Chưa liên kết nhà cung cấp này (`identity-not-found`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409':
+          description: Đây là cách đăng nhập duy nhất (`last-login-method`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
   /api/v1/auth/sessions:
     post:
       tags: [auth]
@@ -114,8 +183,60 @@ paths:
       responses:
         '201': { $ref: '#/components/responses/AuthSession' }
         '401': { $ref: '#/components/responses/Problem' }
+        '429':
+          description: Thao tác quá nhanh (`rate-limited`)
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
         '503':
           description: Không kết nối được Google (có thể thử lại)
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /api/v1/auth/sessions/facebook:
+    post:
+      tags: [auth]
+      summary: Đăng nhập hoặc đăng ký bằng Facebook (access token từ Facebook Login)
+      description: |
+        Server xác minh token qua Graph API (`debug_token`: còn hạn và cấp cho đúng app, rồi `/me`).
+        Tra theo (facebook, id); chưa có thì tạo user mới không mật khẩu (cần email từ Facebook).
+        **Không tự gộp** vào tài khoản có sẵn trùng email (409 `account-exists`): người dùng đăng nhập bằng cách khác
+        rồi liên kết Facebook ở `POST /users/me/identities`. Facebook không phản hồi trả 503, không tạo phiên hay tài khoản.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [access_token]
+              properties:
+                access_token: { type: string, description: Access token do Facebook Login cấp }
+      responses:
+        '201': { $ref: '#/components/responses/AuthSession' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '409':
+          description: Email Facebook đã có tài khoản (`account-exists`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422':
+          description: Facebook không cung cấp email nên không tạo được tài khoản (`facebook-email-missing`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '429':
+          description: Thao tác quá nhanh (`rate-limited`)
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '503':
+          description: Không kết nối được Facebook hoặc chưa cấu hình (có thể thử lại)
           headers:
             Retry-After: { schema: { type: integer } }
           content:
@@ -674,6 +795,11 @@ components:
         full_name: { type: string }
         role: { type: string, enum: [buyer, seller, admin] }
         created_at: { type: string, format: date-time }
+        providers:
+          type: array
+          items: { type: string, enum: [google, facebook] }
+          description: Nhà cung cấp OAuth đã liên kết (trường tính toán từ user_identities)
+        has_password: { type: boolean, description: 'false nếu tài khoản chỉ đăng nhập bằng Google/Facebook (trường tính toán)' }
     AuthSession:
       type: object
       properties:

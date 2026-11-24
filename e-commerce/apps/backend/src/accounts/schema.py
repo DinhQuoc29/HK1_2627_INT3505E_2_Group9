@@ -2,6 +2,7 @@
 import re
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -75,6 +76,29 @@ class GoogleLoginRequest(_Strict):
         return v
 
 
+class FacebookLoginRequest(_Strict):
+    access_token: str
+
+    @field_validator("access_token")
+    @classmethod
+    def _token(cls, v: str) -> str:
+        if not 1 <= len(v) <= 4096:
+            raise ValueError("Access token không hợp lệ.")
+        return v
+
+
+class LinkIdentityRequest(_Strict):
+    provider: Literal["google", "facebook"]
+    credential: str  # Google: ID token; Facebook: access token
+
+    @field_validator("credential")
+    @classmethod
+    def _credential(cls, v: str) -> str:
+        if not 1 <= len(v) <= 4096:
+            raise ValueError("Credential không hợp lệ.")
+        return v
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -83,6 +107,8 @@ class UserOut(BaseModel):
     full_name: str
     role: str
     created_at: datetime
+    providers: list[str] = []  # nhà cung cấp OAuth đã liên kết, ví dụ ["google", "facebook"]
+    has_password: bool = True  # False: tài khoản chỉ đăng nhập bằng Google
 
 
 class AuthSessionOut(BaseModel):

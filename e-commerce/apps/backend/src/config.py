@@ -17,6 +17,11 @@ class Settings:
     login_max_failures: int = 5
     login_lock_minutes: int = 15
     google_client_id: str = ""
+    # Facebook Login: app_secret chỉ nằm ở server (biến môi trường), không bao giờ gửi cho client.
+    facebook_app_id: str = ""
+    facebook_app_secret: str = ""
+    # Giới hạn số request ghi (đăng ký, đăng nhập) mỗi IP mỗi phút; 0 = tắt. Bộ nhớ trong tiến trình.
+    rate_limit_per_minute: int = 20
 
     @classmethod
     def from_env(cls, **overrides) -> "Settings":
@@ -29,6 +34,9 @@ class Settings:
             login_max_failures=int(e("LOGIN_MAX_FAILURES", "5")),
             login_lock_minutes=int(e("LOGIN_LOCK_MINUTES", "15")),
             google_client_id=e("GOOGLE_CLIENT_ID", ""),
+            facebook_app_id=e("FACEBOOK_APP_ID", ""),
+            facebook_app_secret=e("FACEBOOK_APP_SECRET", ""),
+            rate_limit_per_minute=int(e("RATE_LIMIT_PER_MINUTE", "20")),
         )
         names = {f.name for f in fields(cls)}
         for k, v in overrides.items():

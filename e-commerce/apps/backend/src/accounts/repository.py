@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from accounts.model import AuthSession, PrivacySettings, User, UserIdentity
@@ -67,3 +67,13 @@ def revoke_session(s: Session, sid: uuid.UUID, now: datetime) -> None:
         .where(AuthSession.id == sid, AuthSession.revoked_at.is_(None))
         .values(revoked_at=now)
     )
+
+
+def list_providers(s: Session, user_id: uuid.UUID) -> list[str]:
+    return list(s.scalars(select(UserIdentity.provider).where(UserIdentity.user_id == user_id).order_by(UserIdentity.provider)))
+
+
+def delete_identity(s: Session, user_id: uuid.UUID, provider: str) -> int:
+    return s.execute(
+        delete(UserIdentity).where(UserIdentity.user_id == user_id, UserIdentity.provider == provider)
+    ).rowcount

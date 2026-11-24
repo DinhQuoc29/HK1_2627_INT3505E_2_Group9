@@ -59,11 +59,11 @@ class User(Base, TimestampMixin):
 
 
 class UserIdentity(Base, CreatedAtMixin):
-    """Liên kết tài khoản với nhà cung cấp OAuth (Google)."""
+    """Liên kết tài khoản với nhà cung cấp OAuth (Google, Facebook)."""
 
     __tablename__ = "user_identities"
     __table_args__ = (
-        CheckConstraint("provider IN ('google')", name="ck_user_identities_provider"),
+        CheckConstraint("provider IN ('google', 'facebook')", name="ck_user_identities_provider"),
         UniqueConstraint("provider", "provider_subject", name="uq_user_identities_provider_subject"),
         UniqueConstraint("user_id", "provider", name="uq_user_identities_user_provider"),
     )

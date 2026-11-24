@@ -14,5 +14,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    // Test độc lập với apps/web/.env của từng máy (mặc định: chưa cấu hình nhà cung cấp nào).
+    env: { VITE_GOOGLE_CLIENT_ID: '', VITE_FACEBOOK_APP_ID: '' },
   },
 })
