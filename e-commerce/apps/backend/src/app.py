@@ -1,14 +1,14 @@
-"""Application factory (xem slide B7). Chạy dev: `flask --app app run` từ thư mục src/."""
+"""Application factory. Chạy dev (từ thư mục src/): uvicorn app:create_app --factory --port 5000 --reload"""
 import json
 import logging
 import pathlib
 
-from flask import Flask, jsonify, send_file
-from flask_jwt_extended import JWTManager
+from fastapi import FastAPI
+from fastapi.responses import FileResponse, HTMLResponse
 
 import accounts.model  # noqa: F401  (đăng ký model)
-from common.errors import ProblemError, problem_response, register_error_handlers
-from config import Config
+from common.errors import register_error_handlers
+from config import Settings
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -21,55 +21,42 @@ class _JsonFormatter(logging.Formatter):
         )
 
 
-def create_app(overrides: dict | None = None) -> Flask:
-    import db  # noqa: F401  (nạp .env trước khi đọc Config)
-
-    app = Flask(__name__)
-    cfg = Config()
-    app.config.from_mapping(vars(cfg))
-    if overrides:
-        app.config.update(overrides)
-    if len(app.config["JWT_SECRET_KEY"]) < 32:
-        Config.validate(cfg)
-
+def _setup_logging() -> None:
     handler = logging.StreamHandler()
     handler.setFormatter(_JsonFormatter())
-    logging.getLogger("accounts").handlers = [handler]
-    logging.getLogger("accounts").setLevel(logging.INFO)
+    for name in ("accounts", "app"):
+        logger = logging.getLogger(name)
+        logger.handlers = [handler]
+        logger.setLevel(logging.INFO)
 
-    jwt = JWTManager(app)
 
-    @jwt.expired_token_loader
-    def _expired(_h, _p):
-        return problem_response(ProblemError(401, "token-expired", "Access token đã hết hạn."))
+def create_app(**overrides) -> FastAPI:
+    import db  # noqa: F401  (nạp .env trước khi đọc cấu hình)
 
-    @jwt.invalid_token_loader
-    def _invalid(_reason):
-        return problem_response(ProblemError(401, "invalid-token", "Token không hợp lệ."))
+    settings = Settings.from_env(**overrides)
+    settings.validate()
+    _setup_logging()
 
-    @jwt.unauthorized_loader
-    def _missing(_reason):
-        return problem_response(
-            ProblemError(401, "missing-token", "Cần đăng nhập.", headers={"WWW-Authenticate": "Bearer"})
-        )
-
+    # Tài liệu API là openapi.yaml viết trước (design-first); tắt trang tự sinh để chỉ có một nguồn sự thật.
+    app = FastAPI(title="E-commerce API", docs_url=None, redoc_url=None, openapi_url=None)
+    app.state.settings = settings
     register_error_handlers(app)
 
-    from accounts.routes import bp as accounts_bp
+    from accounts.routes import router as accounts_router
 
-    app.register_blueprint(accounts_bp)
+    app.include_router(accounts_router)
 
-    @app.get("/healthz")
+    @app.get("/healthz", include_in_schema=False)
     def healthz():
-        return jsonify(status="ok")
+        return {"status": "ok"}
 
-    @app.get("/api/v1/openapi.yaml")
+    @app.get("/api/v1/openapi.yaml", include_in_schema=False)
     def openapi_spec():
-        return send_file(ROOT / "openapi.yaml", mimetype="application/yaml")
+        return FileResponse(ROOT / "openapi.yaml", media_type="application/yaml")
 
-    @app.get("/api/v1/docs")
+    @app.get("/api/v1/docs", include_in_schema=False)
     def swagger_ui():
-        return (
+        return HTMLResponse(
             "<!doctype html><title>API docs</title>"
             '<link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">'
             '<div id="ui"></div><script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>'
@@ -77,4 +64,3 @@ def create_app(overrides: dict | None = None) -> Flask:
         )
 
     return app
-

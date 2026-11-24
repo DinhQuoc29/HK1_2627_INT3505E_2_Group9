@@ -18,7 +18,7 @@ Cập nhật: 24/11/2026 · Nhánh: `feature/auth-login-register`
 - Reviews: `Review`.
 - `tests/test_schema_sync.py` kiểm tra model khớp schema trong DB.
 
-### Backend Auth (Flask)
+### Backend Auth (FastAPI)
 - Endpoint dưới `/api/v1`:
   - `POST /users`: đăng ký.
   - `GET /users/me`: hồ sơ người dùng đang đăng nhập.

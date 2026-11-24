@@ -1,19 +1,14 @@
-"""Phân quyền (RBAC). Dùng sau login_required: @login_required @require_role('admin')."""
-from functools import wraps
+"""Phân quyền (RBAC). Dùng làm dependency sau xác thực: `Depends(require_role("admin"))`."""
+from fastapi import Depends
 
-from flask import g
-
+from accounts.authentication import CurrentAuth, current_auth
 from common.errors import ProblemError
 
 
 def require_role(*roles: str):
-    def decorator(fn):
-        @wraps(fn)
-        def wrapper(*args, **kwargs):
-            if g.current_user.role not in roles:
-                raise ProblemError(403, "forbidden", "Bạn không có quyền thực hiện thao tác này.")
-            return fn(*args, **kwargs)
+    def checker(auth: CurrentAuth = Depends(current_auth)) -> CurrentAuth:
+        if auth.user.role not in roles:
+            raise ProblemError(403, "forbidden", "Bạn không có quyền thực hiện thao tác này.")
+        return auth
 
-        return wrapper
-
-    return decorator
+    return checker
