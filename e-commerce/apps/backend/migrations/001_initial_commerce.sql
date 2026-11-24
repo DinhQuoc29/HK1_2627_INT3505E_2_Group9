@@ -188,6 +188,121 @@ CREATE TABLE reviews (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE privacy_settings (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    personalization_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Append-only behavior log; intentionally no foreign keys to OLTP tables.
+CREATE TABLE behavior_events (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    client_event_id UUID NOT NULL UNIQUE,
+    event_type TEXT NOT NULL CHECK (event_type IN ('click', 'product_view', 'search', 'filter', 'impression', 'view_review', 'add_to_cart', 'remove_from_cart', 'purchase')),
+    user_id UUID,
+    session_id UUID NOT NULL,
+    product_id UUID,
+    category_id UUID,
+    order_id UUID,
+    rec_request_id UUID,
+    search_event_id UUID,
+    placement TEXT CHECK (placement IN ('home', 'similar', 'popular', 'new_user', 'search', 'category', 'cart', 'product_detail', 'other')),
+    position SMALLINT CHECK (position >= 0),
+    search_query VARCHAR(200),
+    filters JSONB,
+    dwell_ms INTEGER CHECK (dwell_ms >= 0),
+    quantity INTEGER CHECK (quantity > 0),
+    unit_price BIGINT CHECK (unit_price > 0),
+    is_repeat BOOLEAN,
+    occurred_at TIMESTAMPTZ NOT NULL,
+    received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT ck_events_product_required CHECK (event_type NOT IN ('click', 'product_view', 'impression', 'view_review', 'add_to_cart', 'remove_from_cart', 'purchase') OR product_id IS NOT NULL),
+    CONSTRAINT ck_events_search CHECK (event_type <> 'search' OR search_query IS NOT NULL),
+    CONSTRAINT ck_events_filter CHECK (event_type <> 'filter' OR category_id IS NOT NULL OR filters IS NOT NULL),
+    CONSTRAINT ck_events_cart CHECK (event_type NOT IN ('add_to_cart', 'remove_from_cart') OR (quantity IS NOT NULL AND user_id IS NOT NULL)),
+    CONSTRAINT ck_events_purchase CHECK (event_type <> 'purchase' OR (order_id IS NOT NULL AND user_id IS NOT NULL AND quantity IS NOT NULL AND unit_price IS NOT NULL AND is_repeat IS NOT NULL)),
+    CONSTRAINT ck_events_dwell CHECK (dwell_ms IS NULL OR event_type = 'product_view')
+);
+
+CREATE TABLE product_daily_stats (
+    product_id UUID NOT NULL,
+    stat_date DATE NOT NULL,
+    view_count INTEGER NOT NULL DEFAULT 0,
+    unique_viewers INTEGER NOT NULL DEFAULT 0,
+    click_count INTEGER NOT NULL DEFAULT 0,
+    add_to_cart_count INTEGER NOT NULL DEFAULT 0,
+    order_count INTEGER NOT NULL DEFAULT 0,
+    units_sold INTEGER NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT pk_product_daily_stats PRIMARY KEY (product_id, stat_date),
+    CONSTRAINT ck_product_daily_stats_nonneg CHECK (view_count >= 0 AND unique_viewers >= 0 AND click_count >= 0 AND add_to_cart_count >= 0 AND order_count >= 0 AND units_sold >= 0)
+);
+
+CREATE TABLE product_popularity (
+    product_id UUID PRIMARY KEY,
+    views_30d INTEGER NOT NULL DEFAULT 0,
+    unique_viewers_30d INTEGER NOT NULL DEFAULT 0,
+    clicks_30d INTEGER NOT NULL DEFAULT 0,
+    add_to_cart_30d INTEGER NOT NULL DEFAULT 0,
+    orders_30d INTEGER NOT NULL DEFAULT 0,
+    units_sold_30d INTEGER NOT NULL DEFAULT 0,
+    add_to_cart_rate DOUBLE PRECISION NOT NULL DEFAULT 0,
+    conversion_rate DOUBLE PRECISION NOT NULL DEFAULT 0,
+    rating_avg NUMERIC(3,2) NOT NULL DEFAULT 0,
+    rating_count INTEGER NOT NULL DEFAULT 0,
+    score DOUBLE PRECISION NOT NULL,
+    computed_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE user_recommendations (
+    user_id UUID NOT NULL,
+    product_id UUID NOT NULL,
+    rank SMALLINT NOT NULL CHECK (rank >= 1),
+    score DOUBLE PRECISION NOT NULL,
+    model_version VARCHAR(50) NOT NULL,
+    generated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT pk_user_recommendations PRIMARY KEY (user_id, product_id),
+    CONSTRAINT uq_user_recommendations_rank UNIQUE (user_id, rank)
+);
+
+CREATE TABLE product_similarities (
+    product_id UUID NOT NULL,
+    similar_product_id UUID NOT NULL,
+    rank SMALLINT NOT NULL CHECK (rank >= 1),
+    score DOUBLE PRECISION NOT NULL,
+    model_version VARCHAR(50) NOT NULL,
+    generated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT pk_product_similarities PRIMARY KEY (product_id, similar_product_id),
+    CONSTRAINT uq_product_similarities_rank UNIQUE (product_id, rank),
+    CONSTRAINT ck_product_similarities_self CHECK (product_id <> similar_product_id)
+);
+
+CREATE TABLE recommendation_requests (
+    id UUID PRIMARY KEY,
+    user_id UUID,
+    session_id UUID,
+    placement TEXT NOT NULL CHECK (placement IN ('home', 'similar', 'popular', 'new_user')),
+    context_product_id UUID,
+    max_price BIGINT CHECK (max_price > 0),
+    source TEXT NOT NULL CHECK (source IN ('model', 'popular')),
+    fallback_reason TEXT CHECK (fallback_reason IN ('cold_start', 'personalization_off', 'guest', 'model_error', 'timeout', 'stale_model')),
+    model_version VARCHAR(50),
+    requested_count SMALLINT NOT NULL CHECK (requested_count > 0),
+    returned_count SMALLINT NOT NULL CHECK (returned_count >= 0),
+    latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT ck_rec_requests_fallback CHECK (fallback_reason IS NULL OR source = 'popular')
+);
+
+CREATE TABLE recommendation_items (
+    request_id UUID NOT NULL REFERENCES recommendation_requests(id) ON DELETE CASCADE,
+    rank SMALLINT NOT NULL CHECK (rank >= 1),
+    product_id UUID NOT NULL,
+    score DOUBLE PRECISION,
+    price_at_time BIGINT NOT NULL CHECK (price_at_time > 0),
+    CONSTRAINT pk_recommendation_items PRIMARY KEY (request_id, rank)
+);
+
 CREATE INDEX ix_auth_sessions_user_id ON auth_sessions (user_id);
 CREATE INDEX ix_shops_province_code ON shops (province_code);
 CREATE INDEX ix_products_shop_id ON products (shop_id);
@@ -200,6 +315,13 @@ CREATE INDEX ix_payments_buyer_id ON payments (buyer_id);
 CREATE INDEX ix_payment_allocations_payment_id ON payment_allocations (payment_id);
 CREATE INDEX ix_reviews_product_id ON reviews (product_id);
 CREATE INDEX ix_reviews_user_id ON reviews (user_id);
+CREATE INDEX ix_events_occurred_brin ON behavior_events USING brin (occurred_at);
+CREATE INDEX ix_events_user_time ON behavior_events (user_id, occurred_at DESC) WHERE user_id IS NOT NULL;
+CREATE INDEX ix_events_rec_request ON behavior_events (rec_request_id) WHERE rec_request_id IS NOT NULL;
+CREATE INDEX ix_product_daily_stats_date ON product_daily_stats (stat_date);
+CREATE INDEX ix_product_popularity_score ON product_popularity (score DESC);
+CREATE INDEX ix_rec_requests_created_brin ON recommendation_requests USING brin (created_at);
+CREATE INDEX ix_rec_requests_user ON recommendation_requests (user_id, created_at DESC) WHERE user_id IS NOT NULL;
 
 -- Provincial codes from Decision 19/2025/QD-TTg, Appendix I.
 INSERT INTO provinces (code, name) VALUES
