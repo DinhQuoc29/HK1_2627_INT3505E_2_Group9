@@ -62,6 +62,37 @@ def test_provinces_public(client):
     assert r.status_code == 200 and len(r.json()) == 34
 
 
+def test_only_shop_owner_can_save_profile_and_see_its_empty_statistics(client):
+    admin = _admin(client)
+    _, _, seller = _signup(client)
+    provinces = client.get("/api/v1/provinces").json()
+    target = provinces[1]
+    path = "/api/v1/shops/me"
+    body = {"name": "  Shop   đã đổi tên  ", "province_code": target["code"]}
+    assert client.put(path, headers=seller, json=body).status_code == 403
+    assert client.get(f"{path}/statistics", headers=seller).status_code == 403
+    assert client.get(f"{path}/statistics", headers=admin).status_code == 403
+
+    application_id = _apply(client, seller).json()["id"]
+    assert client.post(f"/api/v1/admin/seller-applications/{application_id}/approval", headers=admin).status_code == 200
+    original = client.get(path, headers=seller).json()
+    invalid = client.put(path, headers=seller, json={**body, "province_code": "ZZ"})
+    assert invalid.status_code == 422 and invalid.json()["errors"][0]["field"] == "province_code"
+    assert client.get(path, headers=seller).json() == original
+
+    saved = client.put(path, headers=seller, json=body)
+    assert saved.status_code == 200 and saved.headers["cache-control"] == "no-store"
+    assert saved.json() == {**original, "name": "Shop đã đổi tên", "province": target}
+    assert client.get(path, headers=seller).json() == saved.json()
+
+    stats = client.get(f"{path}/statistics", headers=seller)
+    assert stats.status_code == 200 and stats.headers["cache-control"] == "no-store"
+    assert stats.json() == {
+        "total_orders": 0, "captured_orders": 0, "recorded_revenue_vnd": "0",
+        "orders_by_status": {"pending_payment": 0, "paid": 0, "shipping": 0, "completed": 0, "cancelled": 0},
+    }
+
+
 def test_apply_requires_auth_and_verified_email(client):
     assert client.post("/api/v1/seller-applications", json={"name": "Shop", "province_code": "HN"}).status_code == 401
     _, _, h = _signup(client, verified=False)
@@ -176,6 +207,7 @@ def test_order_fulfillment_is_scoped_to_the_shop_and_serialized(client):
         sellers.append((headers, client.get("/api/v1/shops/me", headers=headers).json()["id"]))
     (owner, shop_id), (other, other_shop_id) = sellers
     checkout_id, another_checkout_id, order_id, second_id, sibling_id, category_id, product_id = [uuid.uuid4() for _ in range(7)]
+    payment_id, refunded_payment_id = uuid.uuid4(), uuid.uuid4()
 
     with engine.begin() as db:
         db.execute(text("insert into categories (id,name,slug,level) values (:id,:name,:name,1)"),
@@ -186,9 +218,9 @@ def test_order_fulfillment_is_scoped_to_the_shop_and_serialized(client):
         ), {"id": product_id, "shop": shop_id, "category": category_id})
         db.execute(text(
             "insert into checkouts (id,buyer_id,idempotency_key,request_hash,total_amount) "
-            "values (:id,:buyer,:key,:hash,100000)"
-        ), [{"id": id_, "buyer": buyer_id, "key": str(id_), "hash": "0" * 64}
-            for id_ in (checkout_id, another_checkout_id)])
+            "values (:id,:buyer,:key,:hash,:amount)"
+        ), [{"id": id_, "buyer": buyer_id, "key": str(id_), "hash": "0" * 64, "amount": amount}
+            for id_, amount in ((checkout_id, 200000), (another_checkout_id, 100000))])
         db.execute(text(
             "insert into orders (id,checkout_id,buyer_id,shop_id,status,total_amount,"
             " shipping_name,shipping_phone,shipping_address,paid_at,created_at) "
@@ -202,6 +234,21 @@ def test_order_fulfillment_is_scoped_to_the_shop_and_serialized(client):
             "insert into order_items (id,order_id,product_id,product_name,unit_price,quantity,line_total) "
             "values (:id,:order,:product,'Tên lúc mua',50000,2,100000)"
         ), {"id": uuid.uuid4(), "order": order_id, "product": product_id})
+        db.execute(text(
+            "insert into payments (id,checkout_id,buyer_id,status,amount,refunded_amount,paid_at) "
+            "values (:id,:checkout,:buyer,'succeeded',:amount,:refunded,now())"
+        ), [
+            {"id": payment_id, "checkout": checkout_id, "buyer": buyer_id, "amount": 200000, "refunded": 0},
+            {"id": refunded_payment_id, "checkout": another_checkout_id, "buyer": buyer_id, "amount": 100000, "refunded": 100000},
+        ])
+        db.execute(text(
+            "insert into payment_allocations (id,payment_id,order_id,amount,status,refunded_at) "
+            "values (:id,:payment,:order,100000,:status,case when :status = 'refunded' then now() else null end)"
+        ), [{"id": uuid.uuid4(), "payment": payment, "order": order, "status": status}
+            for order, payment, status in (
+                (order_id, payment_id, "captured"), (sibling_id, payment_id, "captured"),
+                (second_id, refunded_payment_id, "refunded"),
+            )])
 
     try:
         shop_orders = "/api/v1/shops/me/orders"
@@ -219,6 +266,11 @@ def test_order_fulfillment_is_scoped_to_the_shop_and_serialized(client):
         assert client.post(f"{detail}/shipment", headers=other).status_code == 403
         assert client.post(f"{detail}/shipment", headers=buyer).status_code == 403
         assert client.post(f"{detail}/completion", headers=owner).status_code == 409
+        stats = client.get("/api/v1/shops/me/statistics", headers=owner).json()
+        assert stats["total_orders"] == 2 and stats["orders_by_status"]["paid"] == 2
+        assert stats["captured_orders"] == 1 and stats["recorded_revenue_vnd"] == "100000"
+        other_stats = client.get("/api/v1/shops/me/statistics", headers=other).json()
+        assert other_stats["total_orders"] == 1 and other_stats["recorded_revenue_vnd"] == "100000"
 
         order = client.get(detail, headers=buyer).json()
         assert order["items"][0]["product_name"] == "Tên lúc mua"
@@ -232,10 +284,16 @@ def test_order_fulfillment_is_scoped_to_the_shop_and_serialized(client):
         assert done.status_code == 200 and done.json()["status"] == "completed"
         assert done.json()["shipped_at"] == shipping["shipped_at"] and done.json()["completed_at"]
         assert client.get(detail, headers=buyer).json()["status"] == "completed"
+        current = client.get("/api/v1/shops/me/statistics", headers=owner).json()
+        assert current["orders_by_status"]["completed"] == 1 and current["recorded_revenue_vnd"] == "100000"
         assert client.get(f"/api/v1/orders/{sibling_id}", headers=other).json()["status"] == "paid"
         assert client.post(f"{detail}/completion", headers=owner).status_code == 409
     finally:
         with engine.begin() as db:
+            db.execute(text("delete from payment_allocations where payment_id in (:first,:second)"),
+                       {"first": payment_id, "second": refunded_payment_id})
+            db.execute(text("delete from payments where id in (:first,:second)"),
+                       {"first": payment_id, "second": refunded_payment_id})
             db.execute(text("delete from orders where checkout_id in (:first,:second)"),
                        {"first": checkout_id, "second": another_checkout_id})
             db.execute(text("delete from checkouts where id in (:first,:second)"),

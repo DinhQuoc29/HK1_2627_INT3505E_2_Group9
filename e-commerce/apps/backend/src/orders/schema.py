@@ -50,3 +50,10 @@ class OrderOut(BaseModel):
 class OrderPage(BaseModel):
     items: list[OrderOut]
     next_cursor: str | None = None
+
+
+class ShopStatistics(BaseModel):
+    total_orders: int
+    orders_by_status: dict[OrderStatus, int]
+    captured_orders: int
+    recorded_revenue_vnd: str

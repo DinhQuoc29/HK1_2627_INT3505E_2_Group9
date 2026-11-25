@@ -112,6 +112,13 @@ Database khởi tạo mới tự nạp danh mục từ migration 005. Với cont
 docker compose exec -T db psql -X -v ON_ERROR_STOP=1 -U ecommerce -d ecommerce -f /docker-entrypoint-initdb.d/005_seed_product_categories.sql
 ```
 
+## Thông tin và thống kê gian hàng
+
+Người bán cập nhật tên và tỉnh/thành bằng `PUT /api/v1/shops/me`. `GET /api/v1/shops/me/statistics`
+trả số đơn toàn thời gian theo trạng thái và tổng doanh thu ghi nhận. Doanh thu cộng các phân bổ đã thu
+từ thanh toán mô phỏng thành công của đơn đã thanh toán, đang giao hoặc đã giao. Đơn hủy và phân bổ đã
+hoàn bị loại khỏi doanh thu. Số tiền VND được trả về dưới dạng chuỗi số nguyên.
+
 ## Quản lý đơn hàng của người bán
 
 | API | Thao tác |

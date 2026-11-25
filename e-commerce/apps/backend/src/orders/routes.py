@@ -12,13 +12,21 @@ from accounts.permissions import require_role
 from catalog.shops import my_shop
 from common.errors import ProblemError
 from db import session_scope
-from orders import fulfillment, repository
+from orders import fulfillment, repository, statistics
 from orders.model import OrderStatus
-from orders.schema import OrderOut, OrderPage
+from orders.schema import OrderOut, OrderPage, ShopStatistics
 
 router = APIRouter(prefix="/api/v1")
 SellerAuth = Annotated[CurrentAuth, Depends(require_role("seller"))]
 OrderReader = Annotated[CurrentAuth, Depends(require_role("buyer", "seller"))]
+
+
+@router.get("/shops/me/statistics", response_model=ShopStatistics)
+def get_my_shop_statistics(response: Response, auth: SellerAuth):
+    response.headers["Cache-Control"] = "no-store"
+    with session_scope() as s:
+        shop = my_shop(s, auth.user.id)
+        return statistics.for_shop(s, shop.id)
 
 
 def _encode_cursor(created_at: datetime, order_id: uuid.UUID) -> str:

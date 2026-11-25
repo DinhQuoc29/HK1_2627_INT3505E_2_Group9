@@ -92,7 +92,7 @@ function OrderList({ status }: { status?: OrderStatus }) {
 export default function SellerOrdersPage() {
   const [params, setParams] = useSearchParams()
   const value = params.get('status')
-  const status = orderStatusOptions.find(([key]) => key === value)?.[0] as OrderStatus | undefined
+  const status = orderStatusOptions.find(([key]) => key === value)?.[0]
 
   return (
     <AppShell>

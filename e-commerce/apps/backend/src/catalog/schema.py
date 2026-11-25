@@ -16,7 +16,7 @@ class CreateShopRequest(BaseModel):
     @field_validator("name", mode="before")
     @classmethod
     def _name(cls, v):
-        if not isinstance(v, str):
+        if not isinstance(v, str) or "\x00" in v:
             raise ValueError("Tên shop không hợp lệ.")
         v = " ".join(v.split())
         if not 3 <= len(v) <= 150:
@@ -26,7 +26,7 @@ class CreateShopRequest(BaseModel):
     @field_validator("province_code", mode="before")
     @classmethod
     def _province(cls, v):
-        if not isinstance(v, str) or not 1 <= len(v.strip()) <= 4:
+        if not isinstance(v, str) or "\x00" in v or not 1 <= len(v.strip()) <= 4:
             raise ValueError("Mã tỉnh/thành không hợp lệ.")
         return v.strip()
 

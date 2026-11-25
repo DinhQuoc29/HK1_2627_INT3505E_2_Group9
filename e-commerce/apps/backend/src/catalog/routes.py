@@ -8,7 +8,7 @@ from accounts.authentication import CurrentAuth
 from accounts.permissions import require_role
 from catalog import categories, listings, repository, shops
 from catalog.schema import (
-    ProductCategoryOut, ProductInput, ProductState, ProductStatusRequest, ProvinceOut, SellerProductOut,
+    CreateShopRequest, ProductCategoryOut, ProductInput, ProductState, ProductStatusRequest, ProvinceOut, SellerProductOut,
     SellerProductPage, ShopOut,
 )
 from db import session_scope
@@ -24,11 +24,19 @@ def list_provinces():
 
 
 @router.get("/shops/me", response_model=ShopOut)
-def get_my_shop(response: Response, auth: CurrentAuth = Depends(require_role("seller"))):
+def get_my_shop(response: Response, auth: SellerAuth):
     with session_scope() as s:
         out = ShopOut.model_validate(shops.my_shop(s, auth.user.id))
     response.headers["Cache-Control"] = "no-store"
     return out
+
+
+@router.put("/shops/me", response_model=ShopOut)
+def update_my_shop(body: CreateShopRequest, response: Response, auth: SellerAuth):
+    response.headers["Cache-Control"] = "no-store"
+    with session_scope() as s:
+        shop = shops.update_my_shop(s, auth.user.id, name=body.name, province_code=body.province_code)
+        return ShopOut.model_validate(shop)
 
 
 @router.get("/shops/me/product-categories", response_model=list[ProductCategoryOut])

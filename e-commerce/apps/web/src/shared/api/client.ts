@@ -21,6 +21,12 @@ export type SellerApplication = {
 export type AdminSellerApplication = SellerApplication & { applicant_id: string; applicant_email: string; applicant_name: string }
 export type AdminSellerApplicationPage = { items: AdminSellerApplication[]; next_cursor: string | null }
 export type Shop = { id: string; name: string; province: Province; created_at: string }
+export type ShopStatistics = {
+  total_orders: number
+  orders_by_status: Record<OrderStatus, number>
+  captured_orders: number
+  recorded_revenue_vnd: string
+}
 export type ProductCategory = { id: string; name: string; parent_name: string }
 export type ProductStatus = 'active' | 'inactive'
 export type ProductInput = {
@@ -175,6 +181,8 @@ export const api = {
   forgotPassword: (email: string) => request<{ status: string }>('POST', '/auth/password-resets', { email }),
   resetPassword: (token: string, new_password: string) => request<null>('POST', '/auth/password-resets/confirmation', { token, new_password }),
   myShop: () => authed<Shop>('GET', '/shops/me'),
+  updateMyShop: (body: { name: string; province_code: string }) => authed<Shop>('PUT', '/shops/me', body),
+  shopStatistics: () => authed<ShopStatistics>('GET', '/shops/me/statistics'),
   sellerProductCategories: () => authed<ProductCategory[]>('GET', '/shops/me/product-categories'),
   sellerProducts: ({ q, status, page }: { q: string; status: ProductStatus | ''; page: number }) => {
     const query = new URLSearchParams({ page: String(page) })

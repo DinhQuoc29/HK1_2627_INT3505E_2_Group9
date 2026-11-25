@@ -9,6 +9,10 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 const problem = (status: number, type: string, detail: string, extra: object = {}) =>
   new Response(JSON.stringify({ type: `/problems/${type}`, title: 't', status, detail, ...extra }), { status })
 const shop = { id: 's1', name: 'Shop An', province: { code: '01', name: 'Hà Nội' }, created_at: '2026-01-01T00:00:00Z' }
+const emptyStats = {
+  total_orders: 0, captured_orders: 0, recorded_revenue_vnd: '0',
+  orders_by_status: { pending_payment: 0, paid: 0, shipping: 0, completed: 0, cancelled: 0 },
+}
 const application = (status: string, extra: object = {}) => ({ id: 'a1', shop_name: 'Shop An', province_code: '01', province_name: 'Hà Nội', status, reject_reason: null, created_at: '2026-01-01T00:00:00Z', reviewed_at: null, ...extra })
 
 type Call = { url: string; method: string; body?: unknown }
@@ -23,7 +27,7 @@ function setup(
     calls.push({ url, method, body: init?.body ? JSON.parse(String(init.body)) : undefined })
     if (url.endsWith('/auth/tokens')) return json({ access_token: 't', token_type: 'Bearer', expires_in: 900, user })
     if (url.endsWith('/provinces')) return json([{ code: '01', name: 'Hà Nội' }, { code: '79', name: 'TP. Hồ Chí Minh' }])
-    return handler(url, method) ?? json(null, 500)
+    return handler(url, method) ?? (url.endsWith('/shops/me/statistics') ? json(emptyStats) : json(null, 500))
   }))
   render(<MemoryRouter initialEntries={[initialPath]}><AppRoutes /></MemoryRouter>)
   return calls
@@ -101,6 +105,26 @@ describe('Đăng ký người bán (nộp hồ sơ, chờ duyệt)', () => {
 })
 
 describe('Tổng quan shop', () => {
+  it('lưu thông tin shop và mở danh sách theo trạng thái từ thống kê', async () => {
+    const updated = { ...shop, name: 'Shop An mới', province: { code: '79', name: 'TP. Hồ Chí Minh' } }
+    const calls = setup(mkUser('seller'), (url, method) => {
+      if (url.endsWith('/shops/me')) return json(method === 'PUT' ? updated : shop)
+      if (url.endsWith('/shops/me/orders?status=paid')) return json({ items: [], next_cursor: null })
+    }, '/seller')
+    await userEvent.click(await screen.findByRole('button', { name: 'Chỉnh sửa thông tin' }))
+    const name = await screen.findByLabelText('Tên shop')
+    await userEvent.clear(name)
+    await userEvent.type(name, updated.name)
+    await userEvent.selectOptions(screen.getByLabelText('Tỉnh/thành (nơi bán)'), updated.province.code)
+    await userEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
+    expect(await screen.findByRole('heading', { name: updated.name })).toBeInTheDocument()
+    expect(screen.getByText(updated.province.name)).toBeInTheDocument()
+    expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({ name: updated.name, province_code: updated.province.code })
+    await userEvent.click(screen.getByRole('link', { name: 'Chờ giao: 0 đơn' }))
+    expect(await screen.findByText('Không có đơn hàng ở trạng thái này.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Trạng thái đơn hàng')).toHaveValue('paid')
+  })
+
   it.each(['lỗi mạng', 'lỗi máy chủ'])('tải lại thông tin shop sau %s', async (failure) => {
     let resolveShop!: (response: Response) => void
     const pendingShop = new Promise<Response>((resolve) => { resolveShop = resolve })

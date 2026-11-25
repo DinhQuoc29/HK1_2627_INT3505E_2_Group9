@@ -8,7 +8,7 @@ const statuses: Record<OrderStatus, { label: string; style: string }> = {
   cancelled: { label: 'Đã hủy', style: 'bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200' },
 }
 
-export const orderStatusOptions = Object.entries(statuses)
+export const orderStatusOptions = (Object.keys(statuses) as OrderStatus[]).map((key) => [key, statuses[key]] as const)
 export const orderPanel = 'min-w-0 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5 dark:border-zinc-800 dark:bg-zinc-900'
 export const orderSecondary = 'inline-flex min-h-11 items-center justify-center rounded-xl border border-zinc-300 px-4 py-2 text-sm font-semibold hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800'
 export const orderMoney = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' })
