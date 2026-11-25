@@ -117,7 +117,7 @@ describe('phân quyền route', () => {
     setup({ restore: 'seller', initial: '/account', route: (c) => (c.path === '/shops/me' ? json(shop) : undefined) })
     const navName = 'Điều hướng kênh người bán'
     const accountNav = within(await screen.findByRole('navigation', { name: navName }))
-    expect(accountNav.getAllByRole('link')).toHaveLength(2)
+    expect(accountNav.getByRole('link', { name: 'Sản phẩm' })).toHaveAttribute('href', '/seller/products')
     expect(accountNav.getByRole('link', { name: 'Tài khoản' })).toHaveAttribute('aria-current', 'page')
 
     await userEvent.click(accountNav.getByRole('link', { name: 'Tổng quan' }))

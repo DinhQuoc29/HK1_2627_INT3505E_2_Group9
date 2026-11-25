@@ -14,6 +14,7 @@ const nav = {
 
 const sellerNav = [
   { to: '/seller', label: 'Tổng quan' },
+  { to: '/seller/products', label: 'Sản phẩm' },
   { to: '/account', label: 'Tài khoản' },
 ] as const
 
@@ -29,7 +30,7 @@ function SellerNavigation() {
           to={to}
           end
           className={({ isActive }) => [
-            'flex min-h-11 flex-1 items-center justify-center rounded-xl px-4 py-2 transition lg:justify-start',
+            'flex min-h-11 flex-1 items-center justify-center whitespace-nowrap rounded-xl px-2 py-2 transition sm:px-4 lg:justify-start',
             'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
             isActive
               ? 'bg-brand-50 font-semibold text-brand-700 dark:bg-brand-900/35 dark:text-brand-100'

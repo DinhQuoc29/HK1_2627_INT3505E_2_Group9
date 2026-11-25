@@ -21,6 +21,24 @@ export type SellerApplication = {
 export type AdminSellerApplication = SellerApplication & { applicant_id: string; applicant_email: string; applicant_name: string }
 export type AdminSellerApplicationPage = { items: AdminSellerApplication[]; next_cursor: string | null }
 export type Shop = { id: string; name: string; province: Province; created_at: string }
+export type ProductCategory = { id: string; name: string; parent_name: string }
+export type ProductStatus = 'active' | 'inactive'
+export type ProductInput = {
+  name: string
+  brand: string | null
+  description: string
+  category_id: string
+  price: number
+  quantity: number
+  images: string[]
+}
+export type SellerProduct = Omit<ProductInput, 'description'> & {
+  id: string
+  description: string | null
+  category_name: string
+  status: ProductStatus
+}
+export type SellerProductPage = { items: SellerProduct[]; has_more: boolean }
 export type Role = User['role']
 export type AdminUser = { id: string; email: string; full_name: string; role: Role; status: 'active' | 'suspended'; created_at: string; has_shop: boolean }
 export type AdminUserPage = { items: AdminUser[]; next_cursor: string | null }
@@ -132,6 +150,17 @@ export const api = {
   forgotPassword: (email: string) => request<{ status: string }>('POST', '/auth/password-resets', { email }),
   resetPassword: (token: string, new_password: string) => request<null>('POST', '/auth/password-resets/confirmation', { token, new_password }),
   myShop: () => authed<Shop>('GET', '/shops/me'),
+  sellerProductCategories: () => authed<ProductCategory[]>('GET', '/shops/me/product-categories'),
+  sellerProducts: ({ q, status, page }: { q: string; status: ProductStatus | ''; page: number }) => {
+    const query = new URLSearchParams({ page: String(page) })
+    if (q) query.set('q', q)
+    if (status) query.set('status', status)
+    return authed<SellerProductPage>('GET', `/shops/me/products?${query}`)
+  },
+  addSellerProduct: (product: ProductInput) => authed<SellerProduct>('POST', '/shops/me/products', product),
+  updateSellerProduct: (id: string, product: ProductInput) => authed<SellerProduct>('PUT', `/shops/me/products/${encodeURIComponent(id)}`, product),
+  changeSellerProductStatus: (id: string, status: ProductStatus) =>
+    authed<SellerProduct>('PATCH', `/shops/me/products/${encodeURIComponent(id)}/status`, { status }),
   changePassword: (b: { current_password?: string; new_password: string }) => authed<null>('PUT', '/users/me/password', b),
   adminUsers: (query: AdminUserQuery) => {
     const qs = new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)]))

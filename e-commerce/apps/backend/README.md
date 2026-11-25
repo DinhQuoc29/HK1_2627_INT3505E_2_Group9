@@ -100,6 +100,18 @@ Token email: ngẫu nhiên 48 byte, DB chỉ lưu SHA-256, dùng một lần (đ
 hết hiệu lực. Xác minh email có hiệu lực 24 giờ, đặt lại mật khẩu 60 phút. Đăng nhập Google tự coi email đã xác minh;
 đặt lại mật khẩu thành công cũng chứng minh sở hữu email. Admin tạo bằng script cũng được coi là đã xác minh.
 
+## Quản lý sản phẩm của người bán
+
+Các API dưới `/api/v1/shops/me/products` dành cho người bán có gian hàng. `GET` hỗ trợ tìm theo tên, lọc trạng thái và phân trang. `POST` đăng sản phẩm, `PUT /{product_id}` sửa thông tin và tồn kho, còn `PATCH /{product_id}/status` ẩn hoặc hiện lại sản phẩm. `GET /api/v1/shops/me/product-categories` trả danh mục cấp 2 để chọn trong biểu mẫu.
+
+Ảnh lưu dưới dạng URL HTTP hoặc HTTPS. Ảnh đầu danh sách làm ảnh đại diện. Tồn kho tính theo đơn vị nguyên, giá tính bằng VND.
+
+Database khởi tạo mới tự nạp danh mục từ migration 005. Với container local đã chạy từ trước, nạp danh mục bằng lệnh dưới đây. Lệnh có thể chạy lại.
+
+```powershell
+docker compose exec -T db psql -X -v ON_ERROR_STOP=1 -U ecommerce -d ecommerce -f /docker-entrypoint-initdb.d/005_seed_product_categories.sql
+```
+
 ## Entity
 - `src/accounts/model.py`: User, UserIdentity, AuthSession, PrivacySettings
 - `src/catalog/model.py`: Province, Shop, Category, Product, ProductImage

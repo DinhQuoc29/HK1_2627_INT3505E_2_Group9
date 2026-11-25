@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import AccountPage from './buyer/AccountPage'
 import SellerRegisterPage from './seller/SellerRegisterPage'
 import SellerShopPage from './seller/SellerShopPage'
+import SellerProductsPage from './seller/products/SellerProductsPage'
 import { AuthProvider } from './shared/auth/AuthContext'
 import AdminSellerApplicationsPage from './admin/AdminSellerApplicationsPage'
 import AdminUsersPage from './admin/AdminUsersPage'
@@ -40,6 +41,7 @@ export function AppRoutes() {
                 <Route path="/seller/register" element={<SellerRegisterPage />} />
                 <Route element={<RoleRoute roles={['seller']} redirectTo="/seller/register" />}>
                   <Route path="/seller" element={<SellerShopPage />} />
+                  <Route path="/seller/products" element={<SellerProductsPage />} />
                 </Route>
               </Route>
               <Route element={<RoleRoute roles={['admin']} />}>
