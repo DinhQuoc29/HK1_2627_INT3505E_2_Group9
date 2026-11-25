@@ -6,17 +6,9 @@ import { Alert } from '../auth/components/ui'
 import { describeError } from '../auth/errors'
 import { Logo } from '../auth/components/AuthLayout'
 import { homeFor, roleLabel } from '../auth/roles'
+import { BuyerStoreLayout } from './BuyerStoreLayout'
 
-const nav = {
-  buyer: [
-    { to: '/', label: 'Trang chủ' },
-    { to: '/products', label: 'Sản phẩm' },
-    { to: '/cart', label: 'Giỏ hàng' },
-    { to: '/orders', label: 'Đơn mua' },
-    { to: '/account', label: 'Tài khoản' },
-  ],
-  admin: [{ to: '/admin', label: 'Người dùng' }, { to: '/admin/sellers', label: 'Duyệt người bán' }, { to: '/account', label: 'Tài khoản' }],
-} as const
+const adminNav = [{ to: '/admin', label: 'Người dùng' }, { to: '/admin/sellers', label: 'Duyệt người bán' }, { to: '/account', label: 'Tài khoản' }] as const
 
 const sellerNav = [
   { to: '/seller', label: 'Tổng quan' },
@@ -80,22 +72,29 @@ export function AppShell({ children, width = 'max-w-3xl' }: { children: ReactNod
   const navigate = useNavigate()
   if (!user) return null
   const { role } = user
+  if (role === 'buyer') {
+    return (
+      <BuyerStoreLayout>
+        {!user.email_verified && <VerifyEmailBanner />}
+        <div className={`mx-auto min-w-0 space-y-6 px-4 py-7 sm:px-6 sm:py-10 ${width}`}>{children}</div>
+      </BuyerStoreLayout>
+    )
+  }
   const containerWidth = role === 'seller' ? 'max-w-6xl' : width
-  const headerWidth = role === 'seller' ? 'max-w-6xl' : role === 'buyer' ? 'max-w-7xl' : width
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950">
       <header className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <div className={`mx-auto flex min-h-16 flex-wrap items-center justify-between gap-3 px-5 py-2 ${headerWidth}`}>
+        <div className={`mx-auto flex min-h-16 flex-wrap items-center justify-between gap-3 px-5 py-2 ${containerWidth}`}>
           <div className="flex items-center gap-6">
-            <Link to={role === 'buyer' ? '/' : homeFor(role)} aria-label="Trang chủ"><Logo /></Link>
+            <Link to={homeFor(role)} aria-label="Trang chủ"><Logo /></Link>
             {role === 'seller' ? (
               <span className="hidden border-l border-zinc-200 pl-6 text-sm font-semibold text-zinc-600 sm:block dark:border-zinc-700 dark:text-zinc-300">
                 Kênh người bán
               </span>
             ) : (
               <nav aria-label="Điều hướng chính" className="flex gap-1 text-sm font-medium">
-                {nav[role].map((n) => (
-                  <NavLink key={n.to} to={n.to} end={role === 'buyer' ? n.to === '/' || n.to === '/account' : true} className={({ isActive }) => `rounded-lg px-3 py-1.5 transition hover:bg-zinc-100 dark:hover:bg-zinc-800 ${isActive ? 'bg-brand-50 text-brand-700 dark:bg-zinc-800' : 'text-zinc-600 dark:text-zinc-300'}`}>{n.label}</NavLink>
+                {adminNav.map((n) => (
+                  <NavLink key={n.to} to={n.to} end className={({ isActive }) => `rounded-lg px-3 py-1.5 transition hover:bg-zinc-100 dark:hover:bg-zinc-800 ${isActive ? 'bg-brand-50 text-brand-700 dark:bg-zinc-800' : 'text-zinc-600 dark:text-zinc-300'}`}>{n.label}</NavLink>
                 ))}
               </nav>
             )}

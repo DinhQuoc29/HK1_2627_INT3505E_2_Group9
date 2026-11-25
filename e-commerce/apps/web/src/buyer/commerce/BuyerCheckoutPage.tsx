@@ -2,10 +2,11 @@ import { useCallback, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { ApiError, api, type Cart, type CheckoutRequest, type CheckoutResult, type FieldError } from '../../shared/api/client'
 import { useAuth } from '../../shared/auth/AuthContext'
-import { Alert, Button, Spinner, TextField } from '../../shared/auth/components/ui'
-import { BuyerStoreLayout } from '../BuyerStoreLayout'
-import { CatalogError, catalogLink, productPrice } from '../catalog/catalogUi'
-import { catalogErrorMessage, useCatalogRequest } from '../catalog/useCatalogRequest'
+import { Alert, Button, TextField } from '../../shared/auth/components/ui'
+import { BuyerStoreLayout } from '../../shared/layout/BuyerStoreLayout'
+import { productPrice } from '../catalog/catalogUi'
+import { BuyerEmptyState, BuyerLoading, BuyerRequestError, buyerLink } from '../BuyerFeedback'
+import { buyerErrorMessage, useBuyerRequest } from '../useBuyerRequest'
 
 const panel = 'min-w-0 rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6 dark:border-zinc-800 dark:bg-zinc-900'
 type Attempt = { key: string; body: CheckoutRequest }
@@ -47,7 +48,7 @@ function CheckoutPage({ storageKey, name }: { storageKey: string; name: string }
     }
     return { cart: await api.cart() }
   }, [storageKey])
-  const { state, retry } = useCatalogRequest(load)
+  const { state, retry } = useBuyerRequest(load)
 
   if (state.status === 'ready' && 'result' in state.data) {
     return <Navigate to={`/checkout/${state.data.result.id}`} replace />
@@ -56,11 +57,11 @@ function CheckoutPage({ storageKey, name }: { storageKey: string; name: string }
   return (
     <BuyerStoreLayout>
       <div className="mx-auto max-w-6xl space-y-5 px-4 py-7 sm:px-6 sm:py-10">
-        <Link to="/cart" className={`inline-block ${catalogLink}`}>← Quay lại giỏ hàng</Link>
+        <Link to="/cart" className={buyerLink}>← Quay lại giỏ hàng</Link>
         <h1 className="text-3xl font-bold tracking-tight">Thanh toán</h1>
-        {state.status === 'loading' && <Spinner label="Đang tải thông tin thanh toán…" />}
+        {state.status === 'loading' && <BuyerLoading label="Đang tải thông tin thanh toán…" />}
         {state.status === 'error' && (
-          <CatalogError message={catalogErrorMessage(state.error, 'Không tải được thông tin thanh toán.')} retry={retry} />
+          <BuyerRequestError message={buyerErrorMessage(state.error, 'Không tải được thông tin thanh toán.')} retry={retry} />
         )}
         {state.status === 'ready' && 'cart' in state.data && (
           <ConfirmPurchase initial={state.data.cart} name={name} storageKey={storageKey} checkResult={retry} />
@@ -157,12 +158,13 @@ function ConfirmPurchase({ initial, name, storageKey, checkResult }: {
 
   if (!lines.length && !attempt) {
     return (
-      <section className={`space-y-3 ${panel}`}>
+      <div className="space-y-3">
         {notice && <Alert>{notice}</Alert>}
-        <p>Giỏ hàng của bạn đang trống.</p>
-        {readKey(storageKey) && <button type="button" onClick={checkResult} className={catalogLink}>Kiểm tra lại kết quả thanh toán</button>}
-        <Link to="/products" className={`inline-block ${catalogLink}`}>Khám phá sản phẩm</Link>
-      </section>
+        <BuyerEmptyState title="Giỏ hàng của bạn đang trống">
+          {readKey(storageKey) && <button type="button" onClick={checkResult} className={buyerLink}>Kiểm tra lại kết quả thanh toán</button>}
+          <Link to="/products" className={buyerLink}>Khám phá sản phẩm</Link>
+        </BuyerEmptyState>
+      </div>
     )
   }
 
@@ -174,13 +176,13 @@ function ConfirmPurchase({ initial, name, storageKey, checkResult }: {
     <div className="space-y-4">
       {notice && <Alert tone={revised && !needsRefresh ? 'info' : 'error'}>{notice}</Alert>}
       {needsRefresh && !busy && (
-        <button type="button" className={catalogLink} onClick={async () => {
+        <button type="button" className={buyerLink} onClick={async () => {
           setBusy(true)
           await refreshReview()
           setBusy(false)
         }}>Cập nhật giỏ hàng</button>
       )}
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
         <form id="checkout-confirm" onSubmit={confirm} className={`space-y-4 ${panel}`}>
           <h2 className="text-lg font-bold">Thông tin nhận hàng</h2>
           <TextField name="name" label="Họ tên người nhận" autoComplete="shipping name" maxLength={100} required defaultValue={name} error={field('name')} disabled={busy || !!attempt} />
@@ -199,8 +201,8 @@ function ConfirmPurchase({ initial, name, storageKey, checkResult }: {
                   const unitPrice = productPrice.format(BigInt(item.unit_price_vnd))
                   return (
                     <li key={item.product_id} className="flex flex-wrap justify-between gap-x-3 gap-y-1">
-                      <span className="min-w-0 break-words">{item.name} × {item.quantity}</span>
-                      <span className="font-medium">{productPrice.format(BigInt(item.line_total_vnd))}</span>
+                      <span className="min-w-0 wrap-anywhere">{item.name} × {item.quantity}</span>
+                      <span className="min-w-0 font-medium wrap-anywhere">{productPrice.format(BigInt(item.line_total_vnd))}</span>
                       <span className={`w-full text-xs ${changed ? 'text-amber-800 dark:text-amber-300' : 'text-zinc-500 dark:text-zinc-400'}`}>
                         Đơn giá {changed && <><del>{productPrice.format(old)}</del> → </>}{unitPrice}
                       </span>

@@ -2,13 +2,14 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type CatalogCategoryGroup, type Province } from '../../shared/api/client'
 import { Alert, SelectField, Spinner, TextField } from '../../shared/auth/components/ui'
-import { catalogErrorMessage, useCatalogRequest } from './useCatalogRequest'
-import { CatalogError, catalogLink } from './catalogUi'
+import { buyerErrorMessage, useBuyerRequest } from '../useBuyerRequest'
+import { BuyerRequestError, buyerLink } from '../BuyerFeedback'
 
 const filterKeys = ['category', 'brand', 'province_code', 'min_price', 'max_price'] as const
 type Filters = Record<(typeof filterKeys)[number], string>
 
 export function CatalogFilters({ params, apply }: { params: URLSearchParams; apply: (next: URLSearchParams) => void }) {
+  const [expanded, setExpanded] = useState(false)
   const filters: Filters = {
     category: params.get('category') ?? '',
     brand: params.get('brand') ?? '',
@@ -16,28 +17,42 @@ export function CatalogFilters({ params, apply }: { params: URLSearchParams; app
     min_price: params.get('min_price') ?? '',
     max_price: params.get('max_price') ?? '',
   }
-  const categories = useCatalogRequest(api.catalogCategories)
-  const provinces = useCatalogRequest(api.provinces)
-  const hasFilters = filterKeys.some((key) => params.has(key))
+  const categories = useBuyerRequest(api.catalogCategories)
+  const provinces = useBuyerRequest(api.provinces)
+  const activeCount = filterKeys.filter((key) => params.has(key)).length
   const query = params.get('q')
   const reset = query ? `/products?${new URLSearchParams({ q: query })}` : '/products'
 
   return (
-    <aside aria-labelledby="catalog-filters" className="self-start rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5 dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-1">
-        <h2 id="catalog-filters" className="text-lg font-bold">Bộ lọc</h2>
-        {hasFilters && <Link to={reset} className={catalogLink}>Xóa bộ lọc</Link>}
+    <aside aria-labelledby="catalog-filters" className="min-w-0 self-start rounded-2xl border border-zinc-200 bg-white px-3 py-2 sm:px-5 lg:py-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="flex flex-wrap items-center justify-between gap-x-2">
+        <h2 id="catalog-filters" className="px-1 text-base font-bold lg:text-lg">
+          Bộ lọc {activeCount > 0 && <span className="text-sm font-medium text-zinc-500">({activeCount})</span>}
+        </h2>
+        <div className="flex flex-wrap items-center">
+          {activeCount > 0 && <Link to={reset} className={buyerLink}>Xóa bộ lọc</Link>}
+          <button
+            type="button"
+            className={`${buyerLink} lg:hidden`}
+            aria-expanded={expanded}
+            aria-controls="catalog-filter-options"
+            onClick={() => setExpanded((open) => !open)}
+          >{expanded ? 'Ẩn tùy chọn' : 'Mở bộ lọc'}</button>
+        </div>
       </div>
-      <FilterForm
-        key={JSON.stringify(filters)}
-        filters={filters}
-        categories={categories}
-        provinces={provinces}
-        apply={(next) => {
-          if (query) next.set('q', query)
-          apply(next)
-        }}
-      />
+      <div id="catalog-filter-options" className={`${expanded ? 'block' : 'hidden'} pt-3 pb-2 lg:block`}>
+        <FilterForm
+          key={JSON.stringify(filters)}
+          filters={filters}
+          categories={categories}
+          provinces={provinces}
+          apply={(next) => {
+            if (query) next.set('q', query)
+            setExpanded(false)
+            apply(next)
+          }}
+        />
+      </div>
     </aside>
   )
 }
@@ -46,8 +61,8 @@ function FilterForm({
   filters, categories, provinces, apply,
 }: {
   filters: Filters
-  categories: ReturnType<typeof useCatalogRequest<CatalogCategoryGroup[]>>
-  provinces: ReturnType<typeof useCatalogRequest<Province[]>>
+  categories: ReturnType<typeof useBuyerRequest<CatalogCategoryGroup[]>>
+  provinces: ReturnType<typeof useBuyerRequest<Province[]>>
   apply: (next: URLSearchParams) => void
 }) {
   const [error, setError] = useState('')
@@ -101,7 +116,7 @@ function FilterForm({
           ))}
         </select>
         {categories.state.status === 'loading' && <Spinner label="Đang tải danh mục…" />}
-        {categories.state.status === 'error' && <CatalogError message="Không tải được danh mục." retry={categories.retry} />}
+        {categories.state.status === 'error' && <BuyerRequestError message="Không tải được danh mục." retry={categories.retry} />}
       </div>
 
       <fieldset>
@@ -124,7 +139,7 @@ function FilterForm({
         />
         {provinces.state.status === 'loading' && <Spinner label="Đang tải tỉnh/thành…" />}
         {provinces.state.status === 'error' && (
-          <CatalogError message={catalogErrorMessage(provinces.state.error, 'Không tải được tỉnh/thành.')} retry={provinces.retry} />
+          <BuyerRequestError message={buyerErrorMessage(provinces.state.error, 'Không tải được tỉnh/thành.')} retry={provinces.retry} />
         )}
       </div>
       {error && <Alert>{error}</Alert>}

@@ -3,8 +3,8 @@ import { Link, useLocation } from 'react-router-dom'
 import { api } from '../../shared/api/client'
 import { useAuth } from '../../shared/auth/AuthContext'
 import { Alert, Button, TextField } from '../../shared/auth/components/ui'
-import { catalogErrorMessage } from '../catalog/useCatalogRequest'
-import { catalogLink } from '../catalog/catalogUi'
+import { buyerErrorMessage } from '../useBuyerRequest'
+import { buyerLink } from '../BuyerFeedback'
 
 export function AddToCart({ productId, inStock }: { productId: string; inStock: boolean }) {
   const { status, user } = useAuth()
@@ -15,7 +15,7 @@ export function AddToCart({ productId, inStock }: { productId: string; inStock: 
   if (!inStock || status === 'loading' || (user && user.role !== 'buyer')) return null
   if (!user) {
     return (
-      <Link to="/login" state={{ from: pathname + search }} className={`inline-block ${catalogLink}`}>
+      <Link to="/login" state={{ from: pathname + search }} className={buyerLink}>
         Đăng nhập để thêm vào giỏ
       </Link>
     )
@@ -31,7 +31,7 @@ export function AddToCart({ productId, inStock }: { productId: string; inStock: 
       await api.addCartItem(productId, quantity)
       setMessage({ tone: 'success', text: 'Đã thêm sản phẩm vào giỏ hàng.' })
     } catch (error) {
-      setMessage({ tone: 'error', text: catalogErrorMessage(error, 'Không thể thêm sản phẩm vào giỏ.') })
+      setMessage({ tone: 'error', text: buyerErrorMessage(error, 'Không thể thêm sản phẩm vào giỏ.') })
     } finally {
       setBusy(false)
     }

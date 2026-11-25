@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom'
 import { api } from '../shared/api/client'
-import { Spinner } from '../shared/auth/components/ui'
-import { BuyerStoreLayout } from './BuyerStoreLayout'
-import { CatalogError } from './catalog/catalogUi'
-import { useCatalogRequest } from './catalog/useCatalogRequest'
+import { useAuth } from '../shared/auth/AuthContext'
+import { BuyerStoreLayout } from '../shared/layout/BuyerStoreLayout'
+import { BuyerEmptyState, BuyerLoading, BuyerRequestError } from './BuyerFeedback'
+import { useBuyerRequest } from './useBuyerRequest'
 
 const benefits = [
   { icon: '◎', title: 'Nhiều lựa chọn', description: 'Khám phá sản phẩm từ nhiều shop trong cùng một nơi.' },
@@ -12,10 +12,11 @@ const benefits = [
 ]
 
 export default function BuyerHomePage() {
+  const { status } = useAuth()
   return (
     <BuyerStoreLayout>
       <div className="mx-auto max-w-7xl space-y-12 px-4 py-7 sm:px-6 sm:py-10 lg:space-y-16">
-        <section className="relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-orange-50 via-rose-50 to-amber-100 px-6 py-10 dark:from-zinc-900 dark:via-zinc-900 dark:to-brand-900/50 sm:px-10 sm:py-14 lg:grid lg:min-h-[25rem] lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:px-14">
+        <section className="relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-orange-50 via-rose-50 to-amber-100 px-5 py-8 dark:from-zinc-900 dark:via-zinc-900 dark:to-brand-900/50 sm:px-10 sm:py-14 lg:grid lg:min-h-[25rem] lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:px-14">
           <div className="pointer-events-none absolute -right-28 -top-32 -z-10 size-[28rem] rounded-full bg-white/70 blur-3xl dark:bg-brand-500/10" aria-hidden />
           <div className="pointer-events-none absolute -bottom-40 left-1/3 -z-10 size-80 rounded-full bg-brand-300/30 blur-3xl" aria-hidden />
           <div className="relative z-10 max-w-2xl">
@@ -23,7 +24,7 @@ export default function BuyerHomePage() {
               <span className="size-1.5 rounded-full bg-brand-500" aria-hidden />
               Chào mừng đến E-Market
             </p>
-            <h1 className="mt-5 text-4xl font-bold leading-[1.08] tracking-tight text-zinc-950 dark:text-white sm:text-5xl lg:text-[3.5rem]">
+            <h1 className="mt-4 text-3xl font-bold leading-[1.08] tracking-tight text-zinc-950 sm:mt-5 sm:text-5xl lg:text-[3.5rem] dark:text-white">
               Món bạn cần,<br />dễ tìm hơn mỗi ngày.
             </h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-zinc-600 dark:text-zinc-300 sm:text-lg">
@@ -34,9 +35,11 @@ export default function BuyerHomePage() {
                 Khám phá sản phẩm
                 <span aria-hidden>→</span>
               </Link>
-              <Link to="/register" className="inline-flex min-h-12 items-center justify-center rounded-xl border border-zinc-300 bg-white/70 px-5 font-semibold text-zinc-800 transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:border-zinc-700 dark:bg-zinc-950/40 dark:text-white dark:hover:bg-zinc-900">
-                Tạo tài khoản
-              </Link>
+              {status === 'anonymous' && (
+                <Link to="/register" className="inline-flex min-h-12 items-center justify-center rounded-xl border border-zinc-300 bg-white/70 px-5 font-semibold text-zinc-800 transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:border-zinc-700 dark:bg-zinc-950/40 dark:text-white dark:hover:bg-zinc-900">
+                  Tạo tài khoản
+                </Link>
+              )}
             </div>
             <div className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-xs font-medium text-zinc-600 dark:text-zinc-300 sm:text-sm">
               <span className="inline-flex items-center gap-2"><span className="text-brand-600" aria-hidden>✓</span> Giỏ hàng nhiều shop</span>
@@ -44,7 +47,7 @@ export default function BuyerHomePage() {
             </div>
           </div>
 
-          <div className="relative mx-auto mt-10 h-64 w-full max-w-md lg:mt-0" aria-label="Minh họa mua sắm">
+          <div className="relative mx-auto mt-10 hidden h-64 w-full max-w-md sm:block lg:mt-0" aria-hidden>
             <div className="absolute left-1/2 top-1/2 grid size-52 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 shadow-2xl shadow-brand-700/25 sm:size-60">
               <div className="grid size-36 place-items-center rounded-[2rem] border border-white/30 bg-white/15 text-7xl text-white shadow-inner sm:size-40">
                 <svg viewBox="0 0 80 80" className="size-24 sm:size-28" fill="none" aria-hidden>
@@ -103,12 +106,12 @@ export default function BuyerHomePage() {
 }
 
 function HomeCategories() {
-  const { state, retry } = useCatalogRequest(api.catalogCategories)
+  const { state, retry } = useBuyerRequest(api.catalogCategories)
 
   return (
     <div className="mt-5">
-      {state.status === 'loading' && <Spinner label="Đang tải danh mục…" />}
-      {state.status === 'error' && <CatalogError message="Không tải được danh mục." retry={retry} />}
+      {state.status === 'loading' && <BuyerLoading label="Đang tải danh mục…" />}
+      {state.status === 'error' && <BuyerRequestError message="Không tải được danh mục." retry={retry} />}
       {state.status === 'ready' && (
         state.data.length ? (
           <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -124,7 +127,7 @@ function HomeCategories() {
               </li>
             ))}
           </ul>
-        ) : <p className="text-sm text-zinc-500">Chưa có danh mục sản phẩm.</p>
+        ) : <BuyerEmptyState title="Chưa có danh mục sản phẩm" />
       )}
     </div>
   )

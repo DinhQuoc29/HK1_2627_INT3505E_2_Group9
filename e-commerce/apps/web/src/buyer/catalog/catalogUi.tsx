@@ -1,18 +1,6 @@
 import { useState } from 'react'
-import { Alert } from '../../shared/auth/components/ui'
 
 export const productPrice = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' })
-
-export const catalogLink = 'rounded-lg px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:text-brand-100 dark:hover:bg-brand-900/40'
-
-export function CatalogError({ message, retry }: { message: string; retry: () => void }) {
-  return (
-    <div className="space-y-3">
-      <Alert>{message}</Alert>
-      <button type="button" onClick={retry} className={catalogLink}>Thử lại</button>
-    </div>
-  )
-}
 
 export function ProductPhoto({ url, alt, lazy = false }: { url: string | null; alt: string; lazy?: boolean }) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null)

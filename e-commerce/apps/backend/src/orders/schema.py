@@ -46,6 +46,7 @@ class OrderOut(BaseModel):
     cancelled_at: datetime | None
     cancelled_by: Literal["buyer", "seller"] | None
     created_at: datetime
+    refunded_amount: int = 0
 
 
 class OrderPage(BaseModel):

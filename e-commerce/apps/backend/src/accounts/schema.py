@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, StrictBool, field_validator
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -179,3 +179,7 @@ class ResetPasswordRequest(TokenRequest):
     new_password: str
 
     _new = field_validator("new_password")(_check_new_password)
+
+
+class PrivacyPreference(_Strict):
+    personalization_enabled: StrictBool

@@ -5,9 +5,11 @@ from datetime import datetime
 
 from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import ColumnElement
 
 from catalog.model import Shop
 from orders.model import Order, OrderItem, OrderStatus
+from orders.payments.model import AllocationStatus, PaymentAllocation
 from orders.schema import OrderItemOut, OrderOut, OrderShopOut, ShippingOut
 from reviews.model import Review
 
@@ -16,8 +18,22 @@ def list_shop_orders(
     s: Session, shop_id: uuid.UUID, *, status: OrderStatus | None,
     after: tuple[datetime, uuid.UUID] | None, limit: int,
 ) -> list[Order]:
+    return _list_orders(s, Order.shop_id == shop_id, status=status, after=after, limit=limit)
+
+
+def list_buyer_orders(
+    s: Session, buyer_id: uuid.UUID, *, status: OrderStatus | None,
+    after: tuple[datetime, uuid.UUID] | None, limit: int,
+) -> list[Order]:
+    return _list_orders(s, Order.buyer_id == buyer_id, status=status, after=after, limit=limit)
+
+
+def _list_orders(
+    s: Session, owner_filter: ColumnElement[bool], *, status: OrderStatus | None,
+    after: tuple[datetime, uuid.UUID] | None, limit: int,
+) -> list[Order]:
     stmt = (
-        select(Order).where(Order.shop_id == shop_id)
+        select(Order).where(owner_filter)
         .order_by(Order.created_at.desc(), Order.id.desc()).limit(limit + 1)
     )
     if status is not None:
@@ -63,6 +79,14 @@ def describe_orders(s: Session, orders: list[Order], shop: Shop | None = None) -
 
     shops = [shop] if shop is not None else s.scalars(select(Shop).where(Shop.id.in_({order.shop_id for order in orders})))
     shops_by_id = {row.id: OrderShopOut.model_validate(row) for row in shops}
+    cancelled = [order.id for order in orders if order.status == OrderStatus.CANCELLED.value]
+    refunds = {}
+    if cancelled:
+        refunds = dict(s.execute(
+            select(PaymentAllocation.order_id, PaymentAllocation.amount).where(
+                PaymentAllocation.order_id.in_(cancelled), PaymentAllocation.status == AllocationStatus.REFUNDED.value,
+            )
+        ).tuples().all())
     return [
         OrderOut(
             id=order.id, checkout_id=order.checkout_id, shop=shops_by_id[order.shop_id], status=order.status,
@@ -70,7 +94,7 @@ def describe_orders(s: Session, orders: list[Order], shop: Shop | None = None) -
             shipping=ShippingOut(name=order.shipping_name, phone=order.shipping_phone, address=order.shipping_address),
             items=items_by_order[order.id], paid_at=order.paid_at, shipped_at=order.shipped_at,
             completed_at=order.completed_at, cancelled_at=order.cancelled_at, cancelled_by=order.cancelled_by,
-            created_at=order.created_at,
+            created_at=order.created_at, refunded_amount=refunds.get(order.id, 0),
         )
         for order in orders
     ]

@@ -48,7 +48,7 @@ export function Alert({ children, tone = 'error' }: { children: ReactNode; tone?
       <svg className="mt-0.5 size-4 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
         <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.9.9 0 0 0-.9.9v4.2a.9.9 0 0 0 1.8 0V5.9A.9.9 0 0 0 10 5Zm0 8.2a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2Z" clipRule="evenodd" />
       </svg>
-      <div>{children}</div>
+      <div className="min-w-0 wrap-anywhere">{children}</div>
     </div>
   )
 }

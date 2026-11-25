@@ -2,12 +2,13 @@ import { GoogleOAuthProvider } from '@react-oauth/google'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import AccountPage from './buyer/AccountPage'
 import BuyerHomePage from './buyer/BuyerHomePage'
-import { BuyerWorkflowPage } from './buyer/BuyerWorkflowPage'
 import CatalogProductsPage from './buyer/catalog/CatalogProductsPage'
 import CatalogProductDetailPage from './buyer/catalog/CatalogProductDetailPage'
 import BuyerCartPage from './buyer/commerce/BuyerCartPage'
 import BuyerCheckoutPage from './buyer/commerce/BuyerCheckoutPage'
 import BuyerCheckoutResultPage from './buyer/commerce/BuyerCheckoutResultPage'
+import BuyerOrdersPage from './buyer/commerce/BuyerOrdersPage'
+import BuyerOrderDetailPage from './buyer/commerce/BuyerOrderDetailPage'
 import SellerRegisterPage from './seller/SellerRegisterPage'
 import SellerShopPage from './seller/SellerShopPage'
 import SellerProductsPage from './seller/products/SellerProductsPage'
@@ -62,22 +63,8 @@ export function AppRoutes() {
                 <Route path="/cart" element={<BuyerCartPage />} />
                 <Route path="/checkout" element={<BuyerCheckoutPage />} />
                 <Route path="/checkout/:checkoutId" element={<BuyerCheckoutResultPage />} />
-                <Route path="/orders" element={<BuyerWorkflowPage
-                  title="Đơn mua"
-                  description="Theo dõi các đơn theo từng shop và xem trạng thái giao hàng mới nhất."
-                  icon="▤"
-                  nextStep="Lịch sử mua hàng, chi tiết đơn và thao tác hủy đủ điều kiện sẽ được kết nối ở bước đơn hàng."
-                  actionHref="/products"
-                  actionLabel="Mua sắm tiếp"
-                />} />
-                <Route path="/orders/:orderId" element={<BuyerWorkflowPage
-                  title="Chi tiết đơn hàng"
-                  description="Xem sản phẩm, số lượng, giá đã mua và tiến trình giao của shop."
-                  icon="↗"
-                  nextStep="Thông tin đơn hàng và các mốc giao nhận sẽ được kết nối ở bước lịch sử đơn."
-                  actionHref="/orders"
-                  actionLabel="Quay lại đơn mua"
-                />} />
+                <Route path="/orders" element={<BuyerOrdersPage />} />
+                <Route path="/orders/:orderId" element={<BuyerOrderDetailPage />} />
               </Route>
               <Route element={<RoleRoute roles={['buyer', 'seller']} />}>
                 <Route path="/seller/register" element={<SellerRegisterPage />} />

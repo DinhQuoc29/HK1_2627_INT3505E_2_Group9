@@ -1,11 +1,11 @@
 import { useCallback } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, type CatalogProductCard } from '../../shared/api/client'
-import { Spinner } from '../../shared/auth/components/ui'
-import { BuyerStoreLayout } from '../BuyerStoreLayout'
+import { BuyerStoreLayout } from '../../shared/layout/BuyerStoreLayout'
 import { CatalogFilters } from './CatalogFilters'
-import { Availability, CatalogError, ProductPhoto, catalogLink, productPrice } from './catalogUi'
-import { catalogErrorMessage, useCatalogRequest } from './useCatalogRequest'
+import { Availability, ProductPhoto, productPrice } from './catalogUi'
+import { BuyerEmptyState, BuyerLoading, BuyerRequestError, buyerLink } from '../BuyerFeedback'
+import { buyerErrorMessage, useBuyerRequest } from '../useBuyerRequest'
 
 export default function CatalogProductsPage() {
   const [params, setParams] = useSearchParams()
@@ -15,10 +15,10 @@ export default function CatalogProductsPage() {
   return (
     <BuyerStoreLayout>
       <div className="mx-auto max-w-7xl px-4 py-7 sm:px-6 sm:py-10">
-        <h1 className="mb-6 break-words text-3xl font-bold tracking-tight">
+        <h1 className="mb-5 text-2xl font-bold tracking-tight wrap-anywhere sm:mb-6 sm:text-3xl">
           {query ? `Kết quả tìm kiếm cho “${query}”` : 'Sản phẩm'}
         </h1>
-        <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[16rem_minmax(0,1fr)] lg:gap-6">
           <CatalogFilters params={params} apply={setParams} />
           <ProductResults key={search} search={search} />
         </div>
@@ -29,7 +29,7 @@ export default function CatalogProductsPage() {
 
 function ProductResults({ search }: { search: string }) {
   const load = useCallback(() => api.catalogProducts(new URLSearchParams(search)), [search])
-  const { state, retry } = useCatalogRequest(load)
+  const { state, retry } = useBuyerRequest(load)
   const params = new URLSearchParams(search)
   const page = Number(params.get('page') ?? 1)
   const pageHref = (target: number) => {
@@ -40,13 +40,13 @@ function ProductResults({ search }: { search: string }) {
   }
 
   if (state.status === 'loading') {
-    return <div className="p-4"><Spinner label="Đang tải sản phẩm…" /></div>
+    return <BuyerLoading label="Đang tải sản phẩm…" />
   }
   if (state.status === 'error') {
     return (
       <div>
-        <CatalogError message={catalogErrorMessage(state.error, 'Không tải được sản phẩm.')} retry={retry} />
-        {search && <Link to="/products" className={`mt-2 inline-block ${catalogLink}`}>Xem tất cả sản phẩm</Link>}
+        <BuyerRequestError message={buyerErrorMessage(state.error, 'Không tải được sản phẩm.')} retry={retry} />
+        {search && <Link to="/products" className={`mt-2 ${buyerLink}`}>Xem tất cả sản phẩm</Link>}
       </div>
     )
   }
@@ -59,18 +59,18 @@ function ProductResults({ search }: { search: string }) {
           {items.map((product) => <ProductCard key={product.id} product={product} search={search} />)}
         </ul>
       ) : (
-        <div className="rounded-2xl border border-dashed border-zinc-300 px-6 py-12 text-center dark:border-zinc-700">
-          <h2 className="text-lg font-semibold">Không tìm thấy sản phẩm</h2>
-          <p className="mt-2 text-sm text-zinc-500">
-            {search ? 'Thử đổi từ khóa hoặc bớt bộ lọc.' : 'Các sản phẩm đang đăng bán sẽ hiển thị tại đây.'}
-          </p>
-        </div>
+        <BuyerEmptyState
+          title="Không tìm thấy sản phẩm"
+          description={search ? 'Thử đổi từ khóa hoặc bớt bộ lọc.' : 'Các sản phẩm đang đăng bán sẽ hiển thị tại đây.'}
+        >
+          {search && <Link to="/products" className={buyerLink}>Xem tất cả sản phẩm</Link>}
+        </BuyerEmptyState>
       )}
       {(page > 1 || has_more) && (
         <nav aria-label="Phân trang sản phẩm" className="flex flex-wrap items-center justify-center gap-3 text-sm">
-          {page > 1 && <Link to={pageHref(page - 1)} className={catalogLink} rel="prev">Trang trước</Link>}
+          {page > 1 && <Link to={pageHref(page - 1)} className={buyerLink} rel="prev">Trang trước</Link>}
           <span className="rounded-lg bg-zinc-200 px-3 py-2 font-medium dark:bg-zinc-800" aria-current="page">Trang {page}</span>
-          {has_more && page < 100_000 && <Link to={pageHref(page + 1)} className={catalogLink} rel="next">Trang sau</Link>}
+          {has_more && page < 100_000 && <Link to={pageHref(page + 1)} className={buyerLink} rel="next">Trang sau</Link>}
         </nav>
       )}
     </div>
@@ -91,7 +91,7 @@ function ProductCard({ product, search }: { product: CatalogProductCard; search:
         <div className="flex flex-1 flex-col gap-2 p-3 sm:p-4">
           {product.brand && <p className="break-words text-xs text-zinc-500 dark:text-zinc-400">{product.brand}</p>}
           <h2 className="break-words text-sm font-semibold leading-5 sm:text-base">{product.name}</h2>
-          <p className="break-words font-bold text-brand-700 dark:text-brand-100">{productPrice.format(product.price)}</p>
+          <p className="text-sm font-bold text-brand-700 wrap-anywhere sm:text-base dark:text-brand-100">{productPrice.format(product.price)}</p>
           <div className="mt-auto space-y-1">
             <p className="break-words text-xs text-zinc-500 dark:text-zinc-400">{product.shop.name} · {product.shop.province.name}</p>
             <Availability inStock={product.in_stock} />

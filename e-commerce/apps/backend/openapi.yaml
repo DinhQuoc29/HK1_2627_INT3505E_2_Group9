@@ -6,7 +6,7 @@ info:
     Accounts (đăng ký, đăng nhập, phiên), Checkout và Orders, Payments (giả lập), Inventory và Reviews.
     Đã có danh sách đơn của shop, chi tiết đơn và cập nhật giao hàng.
     Đã có xác nhận giỏ hàng và ghi thanh toán mô phỏng trong cùng giao dịch.
-    Lịch sử đơn của buyer, hủy đơn, Reviews và API Inventory riêng mới có đặc tả.
+    Buyer xem lịch sử, theo dõi và hủy đơn trước khi bàn giao. Reviews và API Inventory riêng mới có đặc tả.
 
     **Quy ước.** Path chữ thường, kebab-case, danh từ số nhiều; query snake_case. Tiền là số nguyên VND.
     Danh sách phân trang cursor `?limit=&cursor=` trả `{items, next_cursor}`. Chuyển trạng thái đơn mô hình hóa
@@ -79,6 +79,31 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/User' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/users/me/privacy-settings:
+    get:
+      tags: [users]
+      summary: Xem tùy chọn cá nhân hóa của người mua
+      description: Đọc tùy chọn theo tài khoản hiện tại. Mặc định bật nếu tài khoản cũ chưa có bản ghi.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/PrivacyPreference' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [users]
+      summary: Bật hoặc tắt cá nhân hóa cho tài khoản người mua hiện tại
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PrivacyPreference' }
+      responses:
+        '200': { $ref: '#/components/responses/PrivacyPreference' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
   /api/v1/users/me/identities:
     post:
       tags: [users]
@@ -1026,7 +1051,7 @@ paths:
     get:
       tags: [orders]
       summary: Lịch sử đơn của buyer
-      description: Sắp xếp mới nhất trước; phân trang cursor theo `(created_at, id)`. **Vai trò:** buyer.
+      description: Chỉ trả đơn của buyer đang đăng nhập. Mỗi đơn thuộc một shop. Sắp xếp mới nhất trước, phân trang cursor theo `(created_at, id)`.
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/OrderStatusFilter'
@@ -1038,7 +1063,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/OrderPage' }
+        '400': { $ref: '#/components/responses/Problem' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ValidationProblem' }
   /api/v1/orders/{order_id}:
     get:
@@ -1065,7 +1092,8 @@ paths:
       description: |
         Hoàn kho đúng số lượng của đơn này. Đơn đã trả: phân bổ sang `refunded` và cộng `refunded_amount`.
         Đơn chưa trả: nếu lượt mua không còn đơn chờ thanh toán thì payment sang `cancelled`.
-        Hủy lần hai trả 409 và không hoàn kho thêm. **Vai trò:** buyer của đơn hoặc seller của shop.
+        Gửi lại yêu cầu hủy trả đơn đã hủy (200) và giữ nguyên tồn kho, tiền hoàn. Từ lúc bàn giao thì không thể hủy.
+        **Vai trò:** buyer của đơn hoặc seller của shop.
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/OrderId'
@@ -1078,7 +1106,12 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/InvalidTransition' }
+        '409':
+          description: Đơn đã bàn giao, dữ liệu thanh toán không khớp hoặc tồn kho sau khi hoàn vượt giới hạn.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
   /api/v1/orders/{order_id}/shipment:
     post:
       tags: [orders]
@@ -1370,6 +1403,11 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Cart' }
+    PrivacyPreference:
+      description: Tùy chọn cá nhân hóa đã lưu theo tài khoản
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PrivacyPreference' }
     ValidationProblem:
       description: Dữ liệu không hợp lệ
       content:
@@ -1408,7 +1446,7 @@ components:
             type: /problems/invalid-order-transition
             title: Conflict
             status: 409
-            detail: Đơn đang ở trạng thái cancelled nên không thể hủy.
+            detail: Chỉ có thể hủy đơn trước khi shop bàn giao để vận chuyển.
             instance: /api/v1/orders/0190a1b2-0000-7000-8000-00000000c003/cancellation
   schemas:
     ShopStatistics:
@@ -1593,6 +1631,12 @@ components:
       properties:
         email: { type: string, format: email }
         password: { type: string }
+    PrivacyPreference:
+      type: object
+      additionalProperties: false
+      required: [personalization_enabled]
+      properties:
+        personalization_enabled: { type: boolean }
     User:
       type: object
       properties:
@@ -1789,6 +1833,7 @@ components:
         completed_at: { type: string, format: date-time, nullable: true }
         cancelled_at: { type: string, format: date-time, nullable: true }
         cancelled_by: { type: string, enum: [buyer, seller], nullable: true }
+        refunded_amount: { allOf: [{ $ref: '#/components/schemas/Money' }], description: Khoản đã hoàn mô phỏng cho riêng đơn này. }
         created_at: { type: string, format: date-time }
     OrderPage:
       type: object

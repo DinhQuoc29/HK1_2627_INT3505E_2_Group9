@@ -4,12 +4,12 @@ from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
 
-from accounts import admin, emails, service
+from accounts import admin, emails, preferences, service
 from accounts.permissions import require_role
 from accounts.authentication import CurrentAuth, current_auth, get_settings
 from accounts.schema import (
     AdminUpdateUserRequest, AdminUserOut, AdminUserPage, AuthSessionOut, ChangePasswordRequest, FacebookLoginRequest, ForgotPasswordRequest, ResetPasswordRequest, TokenRequest, GoogleLoginRequest, LinkIdentityRequest, LoginRequest, RegisterRequest,
-    UserOut,
+    PrivacyPreference, UserOut,
 )
 from common.errors import ProblemError, problem_response
 from common.ratelimit import rate_limited
@@ -50,6 +50,24 @@ def get_me(response: Response, auth: CurrentAuth = Depends(current_auth)):
     response.headers["Cache-Control"] = "no-store"
     with session_scope() as s:
         return service.profile(s, auth.user)
+
+
+@router.get("/users/me/privacy-settings", response_model=PrivacyPreference)
+def get_privacy_settings(response: Response, auth: CurrentAuth = Depends(require_role("buyer"))):
+    response.headers["Cache-Control"] = "no-store"
+    with session_scope() as s:
+        enabled = preferences.personalization_enabled(s, auth.user.id)
+    return PrivacyPreference(personalization_enabled=enabled)
+
+
+@router.put("/users/me/privacy-settings", response_model=PrivacyPreference)
+def update_privacy_settings(
+    body: PrivacyPreference, response: Response, auth: CurrentAuth = Depends(require_role("buyer")),
+):
+    response.headers["Cache-Control"] = "no-store"
+    with session_scope() as s:
+        preferences.set_personalization(s, auth.user.id, body.personalization_enabled)
+    return body
 
 
 @router.post("/users/me/identities", status_code=201, response_model=UserOut)

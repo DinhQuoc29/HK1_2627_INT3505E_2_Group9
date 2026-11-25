@@ -11,6 +11,7 @@ export type User = {
   email_verified: boolean // cần để đăng ký bán hàng
 }
 export type Provider = 'google' | 'facebook'
+export type PrivacyPreference = { personalization_enabled: boolean }
 export type AuthPayload = { access_token: string; token_type: 'Bearer'; expires_in: number; user: User }
 export type Province = { code: string; name: string }
 export type ApplicationStatus = 'pending' | 'approved' | 'rejected'
@@ -81,7 +82,7 @@ export type Cart = {
   subtotal_vnd: string
 }
 export type OrderStatus = 'pending_payment' | 'paid' | 'shipping' | 'completed' | 'cancelled'
-export type SellerOrder = {
+export type Order = {
   id: string
   checkout_id: string
   shop: { id: string; name: string }
@@ -103,17 +104,20 @@ export type SellerOrder = {
   completed_at: string | null
   cancelled_at: string | null
   cancelled_by: 'buyer' | 'seller' | null
+  refunded_amount?: number
 }
-export type SellerOrderPage = { items: SellerOrder[]; next_cursor: string | null }
+export type OrderPage = { items: Order[]; next_cursor: string | null }
+export type SellerOrder = Order
+export type SellerOrderPage = OrderPage
 export type CheckoutRequest = {
   items: { product_id: string; quantity: number; expected_unit_price: number }[]
-  shipping: SellerOrder['shipping']
+  shipping: Order['shipping']
 }
 export type CheckoutResult = {
   id: string
   total_amount: number
   created_at: string
-  orders: SellerOrder[]
+  orders: Order[]
   payment: {
     id: string
     status: 'pending' | 'succeeded' | 'failed' | 'cancelled'
@@ -168,8 +172,16 @@ async function request<T>(method: string, path: string, body?: unknown, auth = f
   } catch {
     throw new ApiError(0, 'network', 'Không kết nối được máy chủ. Kiểm tra mạng và thử lại.')
   }
+  if (res.ok) {
+    try {
+      const data = await parse(res)
+      if (data === null && res.status !== 204) throw new Error('Missing response body')
+      return data as T
+    } catch {
+      throw new ApiError(0, 'invalid-response', 'Máy chủ trả về dữ liệu không hợp lệ. Vui lòng thử lại.')
+    }
+  }
   const data = (await parse(res).catch(() => null)) as Record<string, unknown> | null
-  if (res.ok) return data as T
   const retry = Number(res.headers.get('Retry-After'))
   throw new ApiError(
     res.status,
@@ -218,6 +230,9 @@ export const api = {
   refresh: refreshOnce,
   logout: () => request<null>('DELETE', '/auth/sessions/current', undefined, true),
   me: () => authed<User>('GET', '/users/me'),
+  privacyPreference: () => authed<PrivacyPreference>('GET', '/users/me/privacy-settings'),
+  setPrivacyPreference: (personalization_enabled: boolean) =>
+    authed<PrivacyPreference>('PUT', '/users/me/privacy-settings', { personalization_enabled }),
   linkIdentity: (provider: Provider, credential: string) => authed<User>('POST', '/users/me/identities', { provider, credential }),
   provinces: () => request<Province[]>('GET', '/provinces'),
   catalogCategories: () => request<CatalogCategoryGroup[]>('GET', '/categories'),
@@ -234,6 +249,14 @@ export const api = {
   checkoutResult: (id: string) => authed<CheckoutResult>('GET', `/checkouts/${encodeURIComponent(id)}`),
   recoverCheckout: (key: string) =>
     authed<CheckoutResult>('GET', `/checkouts?${new URLSearchParams({ confirmation_key: key })}`),
+  buyerOrders: ({ status, cursor }: { status?: OrderStatus; cursor?: string } = {}) => {
+    const query = new URLSearchParams()
+    if (status) query.set('status', status)
+    if (cursor) query.set('cursor', cursor)
+    return authed<OrderPage>('GET', `/orders${query.size ? `?${query}` : ''}`)
+  },
+  order: (id: string) => authed<Order>('GET', `/orders/${encodeURIComponent(id)}`),
+  cancelOrder: (id: string) => authed<Order>('POST', `/orders/${encodeURIComponent(id)}/cancellation`),
   applySeller: (b: { name: string; province_code: string }) => authed<SellerApplication>('POST', '/seller-applications', b),
   myApplication: () => authed<SellerApplication>('GET', '/seller-applications/me'),
   adminApplications: (query: { status?: ApplicationStatus | ''; cursor?: string; limit?: number }) => {
@@ -266,7 +289,6 @@ export const api = {
     if (cursor) query.set('cursor', cursor)
     return authed<SellerOrderPage>('GET', `/shops/me/orders${query.size ? `?${query}` : ''}`)
   },
-  sellerOrder: (id: string) => authed<SellerOrder>('GET', `/orders/${encodeURIComponent(id)}`),
   shipSellerOrder: (id: string) => authed<SellerOrder>('POST', `/orders/${encodeURIComponent(id)}/shipment`),
   completeSellerOrder: (id: string) => authed<SellerOrder>('POST', `/orders/${encodeURIComponent(id)}/completion`),
   changePassword: (b: { current_password?: string; new_password: string }) => authed<null>('PUT', '/users/me/password', b),

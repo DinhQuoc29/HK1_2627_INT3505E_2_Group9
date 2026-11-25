@@ -1,11 +1,11 @@
 import { useCallback, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { ApiError, api, type CatalogProductDetail } from '../../shared/api/client'
-import { Alert, Spinner } from '../../shared/auth/components/ui'
-import { BuyerStoreLayout } from '../BuyerStoreLayout'
+import { BuyerStoreLayout } from '../../shared/layout/BuyerStoreLayout'
 import { AddToCart } from '../commerce/AddToCart'
-import { Availability, CatalogError, ProductPhoto, catalogLink, productPrice } from './catalogUi'
-import { catalogErrorMessage, useCatalogRequest } from './useCatalogRequest'
+import { Availability, ProductPhoto, productPrice } from './catalogUi'
+import { BuyerEmptyState, BuyerLoading, BuyerRequestError, buyerLink } from '../BuyerFeedback'
+import { buyerErrorMessage, useBuyerRequest } from '../useBuyerRequest'
 
 export default function CatalogProductDetailPage() {
   const { productId = '' } = useParams()
@@ -16,7 +16,7 @@ export default function CatalogProductDetailPage() {
   return (
     <BuyerStoreLayout>
       <div className="mx-auto max-w-7xl space-y-5 px-4 py-7 sm:px-6 sm:py-10">
-        <Link to={back} className={`inline-block ${catalogLink}`}><span aria-hidden>← </span>Quay lại danh sách sản phẩm</Link>
+        <Link to={back} className={buyerLink}><span aria-hidden>← </span>Quay lại danh sách sản phẩm</Link>
         <ProductDetail key={productId} id={productId} />
       </div>
     </BuyerStoreLayout>
@@ -25,14 +25,14 @@ export default function CatalogProductDetailPage() {
 
 function ProductDetail({ id }: { id: string }) {
   const load = useCallback(() => api.catalogProduct(id), [id])
-  const { state, retry } = useCatalogRequest(load)
+  const { state, retry } = useBuyerRequest(load)
 
-  if (state.status === 'loading') return <Spinner label="Đang tải chi tiết sản phẩm…" />
+  if (state.status === 'loading') return <BuyerLoading label="Đang tải chi tiết sản phẩm…" />
   if (state.status === 'error') {
     if (state.error instanceof ApiError && [404, 422].includes(state.error.status)) {
-      return <Alert>Sản phẩm không còn được đăng bán hoặc không tồn tại.</Alert>
+      return <BuyerEmptyState title="Sản phẩm không còn hiển thị" description="Sản phẩm đã ngừng bán hoặc đường dẫn không tồn tại." />
     }
-    return <CatalogError message={catalogErrorMessage(state.error, 'Không tải được chi tiết sản phẩm.')} retry={retry} />
+    return <BuyerRequestError message={buyerErrorMessage(state.error, 'Không tải được chi tiết sản phẩm.')} retry={retry} />
   }
   const product = state.data
   const categories = product.parent_category ? [product.parent_category, product.category] : [product.category]
@@ -52,7 +52,7 @@ function ProductDetail({ id }: { id: string }) {
           </ol>
         </nav>
         <div className="space-y-3">
-          <h1 className="break-words text-3xl font-bold leading-tight tracking-tight">{product.name}</h1>
+          <h1 className="text-2xl font-bold leading-tight tracking-tight wrap-anywhere sm:text-3xl">{product.name}</h1>
           {product.brand && <p className="break-words text-sm text-zinc-500 dark:text-zinc-400">Thương hiệu · {product.brand}</p>}
           <p className="break-words text-2xl font-bold text-brand-700 dark:text-brand-100">{productPrice.format(product.price)}</p>
           <Availability inStock={product.in_stock} />

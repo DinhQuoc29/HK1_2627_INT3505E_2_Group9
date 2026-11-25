@@ -4,7 +4,7 @@ import { api, type OrderStatus, type SellerOrderPage } from '../../shared/api/cl
 import { Alert, Spinner } from '../../shared/auth/components/ui'
 import { describeError } from '../../shared/auth/errors'
 import { AppShell } from '../../shared/layout/AppShell'
-import { OrderBadge, orderDate, orderMoney, orderPanel, orderSecondary, orderStatusOptions } from './orderUi'
+import { OrderBadge, orderDate, orderMoney, orderPanel, orderSecondary, orderStatusOptions } from '../../shared/orders/orderUi'
 
 function OrderList({ status }: { status?: OrderStatus }) {
   const [result, setResult] = useState<SellerOrderPage>()

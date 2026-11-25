@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
-import { ApiError } from '../../shared/api/client'
+import { ApiError } from '../shared/api/client'
 
 type RequestState<T> =
   | { status: 'loading' }
   | { status: 'error'; error: unknown }
   | { status: 'ready'; data: T }
 
-export function useCatalogRequest<T>(load: () => Promise<T>) {
+export function useBuyerRequest<T>(load: () => Promise<T>) {
   const [state, setState] = useState<RequestState<T>>({ status: 'loading' })
   const [attempt, setAttempt] = useState(0)
 
@@ -27,6 +27,6 @@ export function useCatalogRequest<T>(load: () => Promise<T>) {
   return { state, retry }
 }
 
-export function catalogErrorMessage(error: unknown, fallback: string): string {
+export function buyerErrorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : fallback
 }
