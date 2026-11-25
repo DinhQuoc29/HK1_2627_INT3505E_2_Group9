@@ -5,7 +5,8 @@ info:
   description: |
     Accounts (đăng ký, đăng nhập, phiên), Checkout và Orders, Payments (giả lập), Inventory và Reviews.
     Đã có danh sách đơn của shop, chi tiết đơn và cập nhật giao hàng.
-    Luồng tạo đơn, thanh toán, lịch sử đơn của buyer, hủy đơn, Reviews và API Inventory riêng mới có đặc tả.
+    Đã có xác nhận giỏ hàng và ghi thanh toán mô phỏng trong cùng giao dịch.
+    Lịch sử đơn của buyer, hủy đơn, Reviews và API Inventory riêng mới có đặc tả.
 
     **Quy ước.** Path chữ thường, kebab-case, danh từ số nhiều; query snake_case. Tiền là số nguyên VND.
     Danh sách phân trang cursor `?limit=&cursor=` trả `{items, next_cursor}`. Chuyển trạng thái đơn mô hình hóa
@@ -863,11 +864,32 @@ paths:
         '403': { $ref: '#/components/responses/Problem' }
         '422': { $ref: '#/components/responses/ValidationProblem' }
   /api/v1/checkouts:
+    get:
+      tags: [checkouts]
+      summary: Tìm kết quả bằng mã xác nhận của buyer
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: confirmation_key
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 64, pattern: '^[!-~]+$' }
+      responses:
+        '200':
+          description: Lượt mua đã hoàn tất
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Checkout' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
     post:
       tags: [checkouts]
-      summary: Xác nhận mua (tự tách đơn theo shop, trừ kho, tạo payment pending)
+      summary: Xác nhận mua và thu tiền mô phỏng
       description: |
-        Server tự tính tiền theo giá hiện tại. Toàn bộ chạy trong một transaction: thiếu hàng một sản phẩm thì hủy cả lượt mua.
+        Các dòng xác nhận phải khớp toàn bộ giỏ hàng. Giá đổi thì trả giá mới để buyer xác nhận lại.
+        Trừ kho, tạo một đơn đã thanh toán cho mỗi shop, tạo payment cùng các phân bổ và xóa giỏ trong một giao dịch.
+        Hủy toàn bộ giao dịch nếu có món không đủ hàng hoặc thanh toán thất bại.
         Header `Idempotency-Key` bắt buộc: gửi lại cùng key và cùng nội dung trả kết quả cũ (200); cùng key khác nội dung trả 409.
         Các dòng giỏ hàng đã mua được xóa. **Vai trò:** buyer.
       security: [{ bearerAuth: [] }]
@@ -902,11 +924,12 @@ paths:
         '409':
           description: |
             `idempotency-key-conflict` (cùng key khác nội dung), `product-unavailable` (ngừng bán),
-            `price-changed` (giá khác giá client thấy, kèm giá mới), `insufficient-stock` (thiếu hàng).
+            `price-changed` (giá khác giá client thấy, kèm giá mới), `insufficient-stock` (thiếu hàng),
+            `cart-changed` (giỏ đã thay đổi), `payment-failed` (giả lập thất bại).
           content:
             application/problem+json:
               schema:
-                oneOf:
+                anyOf:
                   - { $ref: '#/components/schemas/Problem' }
                   - { $ref: '#/components/schemas/PriceChangedProblem' }
                   - { $ref: '#/components/schemas/InsufficientStockProblem' }
@@ -967,8 +990,10 @@ paths:
   /api/v1/checkouts/{checkout_id}/payment-attempts:
     post:
       tags: [payments]
+      deprecated: true
       summary: Thanh toán giả lập (demo, không chuyển tiền thật)
       description: |
+        Đặc tả dự kiến. Luồng hiện tại thu tiền trực tiếp qua POST /api/v1/checkouts.
         Khóa payment trước rồi mới tới đơn. Thành công: `amount` = tổng các đơn còn `pending_payment`, tạo phân bổ cho từng đơn
         và chuyển đơn sang `paid`. Thất bại: payment sang `failed` (có thể thử lại). Payment đã `succeeded` thì trả kết quả cũ,
         không ghi nhận trùng. `simulate` chỉ dùng cho demo/kiểm thử. **Vai trò:** buyer sở hữu lượt mua.
@@ -1301,7 +1326,7 @@ components:
       in: header
       required: true
       description: Chuỗi duy nhất cho mỗi lần xác nhận mua (tối đa 64 ký tự); client tự sinh, ví dụ UUID.
-      schema: { type: string, minLength: 1, maxLength: 64 }
+      schema: { type: string, minLength: 1, maxLength: 64, pattern: '^[!-~]+$' }
     CheckoutId: { name: checkout_id, in: path, required: true, schema: { type: string, format: uuid } }
     OrderId: { name: order_id, in: path, required: true, schema: { type: string, format: uuid } }
     OrderItemId: { name: order_item_id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1716,6 +1741,7 @@ components:
       enum: [pending_payment, paid, shipping, completed, cancelled]
     CheckoutRequest:
       type: object
+      additionalProperties: false
       required: [items, shipping]
       properties:
         items:
@@ -1723,12 +1749,14 @@ components:
           minItems: 1
           items:
             type: object
+            additionalProperties: false
             required: [product_id, quantity, expected_unit_price]
             properties:
               product_id: { type: string, format: uuid }
-              quantity: { type: integer, minimum: 1 }
-              expected_unit_price: { allOf: [{ $ref: '#/components/schemas/Money' }], description: Giá client đang thấy; khác giá hiện tại thì 409 }
+              quantity: { type: integer, minimum: 1, maximum: 2147483647 }
+              expected_unit_price: { type: integer, format: int64, minimum: 1, maximum: 9007199254740991, description: Giá buyer đã xem }
         shipping: { $ref: '#/components/schemas/Shipping' }
+        simulate: { type: string, enum: [succeeded, failed], default: succeeded, description: Chọn failed để thử kịch bản từ chối thanh toán mô phỏng. }
     Shipping:
       type: object
       required: [name, phone, address]

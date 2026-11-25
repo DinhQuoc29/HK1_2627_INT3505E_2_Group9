@@ -6,6 +6,8 @@ import { BuyerWorkflowPage } from './buyer/BuyerWorkflowPage'
 import CatalogProductsPage from './buyer/catalog/CatalogProductsPage'
 import CatalogProductDetailPage from './buyer/catalog/CatalogProductDetailPage'
 import BuyerCartPage from './buyer/commerce/BuyerCartPage'
+import BuyerCheckoutPage from './buyer/commerce/BuyerCheckoutPage'
+import BuyerCheckoutResultPage from './buyer/commerce/BuyerCheckoutResultPage'
 import SellerRegisterPage from './seller/SellerRegisterPage'
 import SellerShopPage from './seller/SellerShopPage'
 import SellerProductsPage from './seller/products/SellerProductsPage'
@@ -58,14 +60,8 @@ export function AppRoutes() {
               <Route path="/account" element={<AccountPage />} />
               <Route element={<RoleRoute roles={['buyer']} redirectTo="/account" />}>
                 <Route path="/cart" element={<BuyerCartPage />} />
-                <Route path="/checkout" element={<BuyerWorkflowPage
-                  title="Thanh toán"
-                  description="Xác nhận thông tin mua hàng sau khi hệ thống kiểm tra lại giá và số lượng còn trong kho."
-                  icon="✓"
-                  nextStep="Luồng xác nhận thanh toán và kết quả giao dịch sẽ được kết nối ở bước checkout."
-                  actionHref="/cart"
-                  actionLabel="Quay lại giỏ hàng"
-                />} />
+                <Route path="/checkout" element={<BuyerCheckoutPage />} />
+                <Route path="/checkout/:checkoutId" element={<BuyerCheckoutResultPage />} />
                 <Route path="/orders" element={<BuyerWorkflowPage
                   title="Đơn mua"
                   description="Theo dõi các đơn theo từng shop và xem trạng thái giao hàng mới nhất."

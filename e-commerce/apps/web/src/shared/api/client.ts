@@ -105,6 +105,22 @@ export type SellerOrder = {
   cancelled_by: 'buyer' | 'seller' | null
 }
 export type SellerOrderPage = { items: SellerOrder[]; next_cursor: string | null }
+export type CheckoutRequest = {
+  items: { product_id: string; quantity: number; expected_unit_price: number }[]
+  shipping: SellerOrder['shipping']
+}
+export type CheckoutResult = {
+  id: string
+  total_amount: number
+  created_at: string
+  orders: SellerOrder[]
+  payment: {
+    id: string
+    status: 'pending' | 'succeeded' | 'failed' | 'cancelled'
+    amount: number
+    allocations: { order_id: string; amount: number; status: 'captured' | 'refunded' }[]
+  }
+}
 export type Role = User['role']
 export type AdminUser = { id: string; email: string; full_name: string; role: Role; status: 'active' | 'suspended'; created_at: string; has_shop: boolean }
 export type AdminUserPage = { items: AdminUser[]; next_cursor: string | null }
@@ -136,13 +152,14 @@ async function parse(res: Response): Promise<unknown> {
   return text ? JSON.parse(text) : null
 }
 
-async function request<T>(method: string, path: string, body?: unknown, auth = false): Promise<T> {
+async function request<T>(method: string, path: string, body?: unknown, auth = false, headers?: Record<string, string>): Promise<T> {
   let res: Response
   try {
     res = await fetch(BASE + path, {
       method,
       credentials: 'same-origin',
       headers: {
+        ...headers,
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         ...(auth && accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
@@ -179,9 +196,9 @@ export const setSessionHandlers = (h: SessionHandlers | null) => { handlers = h 
 const RECOVERABLE = new Set(['token-expired', 'missing-token', 'invalid-token'])
 
 /** Gọi API cần đăng nhập: access token hết hạn (15 phút) thì tự refresh một lần rồi thử lại. */
-async function authed<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function authed<T>(method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<T> {
   try {
-    return await request<T>(method, path, body, true)
+    return await request<T>(method, path, body, true, headers)
   } catch (e) {
     if (!(e instanceof ApiError) || e.status !== 401) throw e
     if (!RECOVERABLE.has(e.slug)) { handlers?.onExpired(); throw e } // vd phiên đã bị thu hồi
@@ -189,7 +206,7 @@ async function authed<T>(method: string, path: string, body?: unknown): Promise<
     try { payload = await refreshOnce() } catch { handlers?.onExpired(); throw e }
     setAccessToken(payload.access_token)
     handlers?.onRefreshed(payload)
-    return request<T>(method, path, body, true)
+    return request<T>(method, path, body, true, headers)
   }
 }
 
@@ -212,6 +229,11 @@ export const api = {
   changeCartItem: (id: string, quantity: number) =>
     authed<Cart>('PATCH', `/cart/items/${encodeURIComponent(id)}`, { quantity }),
   removeCartItem: (id: string) => authed<Cart>('DELETE', `/cart/items/${encodeURIComponent(id)}`),
+  confirmCheckout: (key: string, body: CheckoutRequest) =>
+    authed<CheckoutResult>('POST', '/checkouts', body, { 'Idempotency-Key': key }),
+  checkoutResult: (id: string) => authed<CheckoutResult>('GET', `/checkouts/${encodeURIComponent(id)}`),
+  recoverCheckout: (key: string) =>
+    authed<CheckoutResult>('GET', `/checkouts?${new URLSearchParams({ confirmation_key: key })}`),
   applySeller: (b: { name: string; province_code: string }) => authed<SellerApplication>('POST', '/seller-applications', b),
   myApplication: () => authed<SellerApplication>('GET', '/seller-applications/me'),
   adminApplications: (query: { status?: ApplicationStatus | ''; cursor?: string; limit?: number }) => {

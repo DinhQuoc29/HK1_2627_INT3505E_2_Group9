@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Header, Query, Response
 
 from accounts.authentication import CurrentAuth
 from accounts.model import Role
@@ -12,13 +12,53 @@ from accounts.permissions import require_role
 from catalog.shops import my_shop
 from common.errors import ProblemError
 from db import session_scope
-from orders import fulfillment, repository, statistics
+from orders import checkout, fulfillment, repository, statistics
 from orders.model import OrderStatus
-from orders.schema import OrderOut, OrderPage, ShopStatistics
+from orders.schema import CheckoutOut, CheckoutRequest, OrderOut, OrderPage, PaymentOut, ShopStatistics
 
 router = APIRouter(prefix="/api/v1")
 SellerAuth = Annotated[CurrentAuth, Depends(require_role("seller"))]
 OrderReader = Annotated[CurrentAuth, Depends(require_role("buyer", "seller"))]
+BuyerAuth = Annotated[CurrentAuth, Depends(require_role("buyer"))]
+ConfirmationKey = Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=64, pattern=r"^[!-~]+$")]
+
+
+@router.post("/checkouts", response_model=CheckoutOut, status_code=201)
+def confirm_checkout(body: CheckoutRequest, response: Response, auth: BuyerAuth, key: ConfirmationKey):
+    with session_scope() as s:
+        purchase, created = checkout.confirm(s, auth.user.id, key, body)
+        result = checkout.describe(s, purchase)
+    response.status_code = 201 if created else 200
+    response.headers["Location"] = f"/api/v1/checkouts/{result.id}"
+    response.headers["Cache-Control"] = "no-store"
+    return result
+
+
+@router.get("/checkouts", response_model=CheckoutOut)
+def recover_checkout(
+    response: Response, auth: BuyerAuth,
+    confirmation_key: str = Query(..., min_length=1, max_length=64, pattern=r"^[!-~]+$"),
+):
+    response.headers["Cache-Control"] = "no-store"
+    with session_scope() as s:
+        purchase = checkout.lookup(s, auth.user.id, confirmation_key)
+        if purchase is None:
+            raise ProblemError(404, "checkout-not-found", "Chưa tìm thấy kết quả xác nhận.", headers={"Cache-Control": "no-store"})
+        return checkout.describe(s, purchase)
+
+
+@router.get("/checkouts/{checkout_id}", response_model=CheckoutOut)
+def get_checkout(checkout_id: uuid.UUID, response: Response, auth: BuyerAuth):
+    response.headers["Cache-Control"] = "no-store"
+    with session_scope() as s:
+        return checkout.describe(s, checkout.get_owned(s, auth.user.id, checkout_id))
+
+
+@router.get("/checkouts/{checkout_id}/payment", response_model=PaymentOut)
+def get_checkout_payment(checkout_id: uuid.UUID, response: Response, auth: BuyerAuth):
+    response.headers["Cache-Control"] = "no-store"
+    with session_scope() as s:
+        return checkout.payment_details(s, checkout.get_owned(s, auth.user.id, checkout_id))
 
 
 @router.get("/shops/me/statistics", response_model=ShopStatistics)

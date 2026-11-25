@@ -4,9 +4,15 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, contains_eager
 
+from accounts.model import User
 from cart.model import CartItem
 from catalog.model import Product, ProductImage, Shop
 from orders.model import Inventory
+
+
+def lock_buyer_cart(s: Session, user_id: uuid.UUID) -> None:
+    """Tuần tự hóa thay đổi giỏ và xác nhận mua của cùng tài khoản."""
+    s.execute(select(User.id).where(User.id == user_id).with_for_update(key_share=True)).scalar_one()
 
 
 def cart_rows(s: Session, user_id: uuid.UUID):

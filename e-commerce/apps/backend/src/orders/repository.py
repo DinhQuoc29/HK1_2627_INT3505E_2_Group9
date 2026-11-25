@@ -45,7 +45,7 @@ def order_exists(s: Session, order_id: uuid.UUID) -> bool:
     return s.scalar(select(Order.id).where(Order.id == order_id)) is not None
 
 
-def describe_orders(s: Session, orders: list[Order], shop: Shop) -> list[OrderOut]:
+def describe_orders(s: Session, orders: list[Order], shop: Shop | None = None) -> list[OrderOut]:
     if not orders:
         return []
 
@@ -61,10 +61,11 @@ def describe_orders(s: Session, orders: list[Order], shop: Shop) -> list[OrderOu
             unit_price=item.unit_price, quantity=item.quantity, line_total=item.line_total, has_review=has_review,
         ))
 
-    shop_out = OrderShopOut.model_validate(shop)
+    shops = [shop] if shop is not None else s.scalars(select(Shop).where(Shop.id.in_({order.shop_id for order in orders})))
+    shops_by_id = {row.id: OrderShopOut.model_validate(row) for row in shops}
     return [
         OrderOut(
-            id=order.id, checkout_id=order.checkout_id, shop=shop_out, status=order.status,
+            id=order.id, checkout_id=order.checkout_id, shop=shops_by_id[order.shop_id], status=order.status,
             total_amount=order.total_amount,
             shipping=ShippingOut(name=order.shipping_name, phone=order.shipping_phone, address=order.shipping_address),
             items=items_by_order[order.id], paid_at=order.paid_at, shipped_at=order.shipped_at,

@@ -89,6 +89,13 @@ function CartContents({ initial }: { initial: Cart }) {
             <h2 className="text-lg font-bold">Tạm tính giỏ hàng</h2>
             <p className="break-words text-2xl font-bold text-brand-700 dark:text-brand-100">{money(cart.subtotal_vnd)}</p>
             {hasUnavailable && <p className="text-sm text-zinc-600 dark:text-zinc-400">Tạm tính chỉ gồm các món đang bán và đủ số lượng.</p>}
+            {hasUnavailable ? (
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Cập nhật hoặc xóa các món thiếu hàng trước khi thanh toán.</p>
+            ) : (
+              <Link to="/checkout" className="flex min-h-11 items-center justify-center rounded-xl bg-brand-600 px-4 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500">
+                Tiến hành thanh toán
+              </Link>
+            )}
             <Link to="/products" className={`inline-block ${catalogLink}`}>Tiếp tục mua sắm</Link>
           </aside>
         </div>

@@ -24,6 +24,7 @@ def get_cart(response: Response, auth: BuyerAuth):
 def add_cart_item(body: AddCartItem, response: Response, auth: BuyerAuth):
     response.headers["Cache-Control"] = "no-store"
     with session_scope() as s:
+        repository.lock_buyer_cart(s, auth.user.id)
         service.add_item(s, auth.user.id, body.product_id, body.quantity)
         return service.get_cart(s, auth.user.id)
 
@@ -32,6 +33,7 @@ def add_cart_item(body: AddCartItem, response: Response, auth: BuyerAuth):
 def change_cart_item(product_id: uuid.UUID, body: CartQuantity, response: Response, auth: BuyerAuth):
     response.headers["Cache-Control"] = "no-store"
     with session_scope() as s:
+        repository.lock_buyer_cart(s, auth.user.id)
         service.set_quantity(s, auth.user.id, product_id, body.quantity)
         return service.get_cart(s, auth.user.id)
 
@@ -40,5 +42,6 @@ def change_cart_item(product_id: uuid.UUID, body: CartQuantity, response: Respon
 def remove_cart_item(product_id: uuid.UUID, response: Response, auth: BuyerAuth):
     response.headers["Cache-Control"] = "no-store"
     with session_scope() as s:
+        repository.lock_buyer_cart(s, auth.user.id)
         repository.remove_item(s, auth.user.id, product_id)
         return service.get_cart(s, auth.user.id)

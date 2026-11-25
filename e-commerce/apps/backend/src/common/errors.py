@@ -20,18 +20,20 @@ _TITLES = {
 class ProblemError(Exception):
     """Lỗi nghiệp vụ/HTTP có cấu trúc. `slug` là thành phần cuối của `type`."""
 
-    def __init__(self, status, slug, detail, *, errors=None, headers=None, persist=False):
+    def __init__(self, status, slug, detail, *, errors=None, headers=None, persist=False, extensions=None):
         super().__init__(detail)
         self.status = status
         self.slug = slug
         self.detail = detail
         self.errors = errors
         self.headers = headers or {}
+        self.extensions = extensions or {}
         self.persist = persist  # True: session_scope commit trước khi trả lỗi
 
 
 def problem_response(err: ProblemError, request: Request) -> JSONResponse:
     body = {
+        **err.extensions,
         "type": f"/problems/{err.slug}",
         "title": _TITLES.get(err.status, "Error"),
         "status": err.status,
