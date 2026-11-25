@@ -38,9 +38,9 @@ export function AppRoutes() {
               <Route path="/account" element={<AccountPage />} />
               <Route element={<RoleRoute roles={['buyer', 'seller']} />}>
                 <Route path="/seller/register" element={<SellerRegisterPage />} />
-              </Route>
-              <Route element={<RoleRoute roles={['seller']} redirectTo="/seller/register" />}>
-                <Route path="/seller" element={<SellerShopPage />} />
+                <Route element={<RoleRoute roles={['seller']} redirectTo="/seller/register" />}>
+                  <Route path="/seller" element={<SellerShopPage />} />
+                </Route>
               </Route>
               <Route element={<RoleRoute roles={['admin']} />}>
                 <Route path="/admin" element={<AdminUsersPage />} />

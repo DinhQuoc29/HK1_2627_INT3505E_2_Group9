@@ -453,7 +453,7 @@ paths:
             schema: { $ref: '#/components/schemas/CreateShopRequest' }
       responses:
         '201':
-          description: Đã nộp hồ sơ
+          description: Đã nộp hồ sơ và lên lịch gửi email xác nhận cho người nộp
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SellerApplication' }

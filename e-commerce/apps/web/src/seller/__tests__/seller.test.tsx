@@ -12,7 +12,11 @@ const shop = { id: 's1', name: 'Shop An', province: { code: '01', name: 'Hà N�
 const application = (status: string, extra: object = {}) => ({ id: 'a1', shop_name: 'Shop An', province_code: '01', province_name: 'Hà Nội', status, reject_reason: null, created_at: '2026-01-01T00:00:00Z', reviewed_at: null, ...extra })
 
 type Call = { url: string; method: string; body?: unknown }
-function setup(user: ReturnType<typeof mkUser>, handler: (url: string, method: string) => Response | undefined) {
+function setup(
+  user: ReturnType<typeof mkUser>,
+  handler: (url: string, method: string) => Response | Promise<Response> | undefined,
+  initialPath = '/seller/register',
+) {
   const calls: Call[] = []
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
@@ -21,7 +25,7 @@ function setup(user: ReturnType<typeof mkUser>, handler: (url: string, method: s
     if (url.endsWith('/provinces')) return json([{ code: '01', name: 'Hà Nội' }, { code: '79', name: 'TP. Hồ Chí Minh' }])
     return handler(url, method) ?? json(null, 500)
   }))
-  render(<MemoryRouter initialEntries={['/seller/register']}><AppRoutes /></MemoryRouter>)
+  render(<MemoryRouter initialEntries={[initialPath]}><AppRoutes /></MemoryRouter>)
   return calls
 }
 
@@ -54,6 +58,19 @@ describe('Đăng ký người bán (nộp hồ sơ, chờ duyệt)', () => {
     expect(screen.queryByRole('button', { name: 'Gửi hồ sơ' })).not.toBeInTheDocument()
   })
 
+  it('kiểm tra hồ sơ đã được duyệt rồi vào kênh người bán', async () => {
+    let reviewed = false
+    setup(mkUser('buyer'), (url) => {
+      if (url.endsWith('/seller-applications/me')) return json(application(reviewed ? 'approved' : 'pending'))
+      if (url.endsWith('/users/me')) return json(mkUser('seller'))
+      if (url.endsWith('/shops/me')) return json(shop)
+    })
+    const check = await screen.findByRole('button', { name: 'Kiểm tra trạng thái' })
+    reviewed = true
+    await userEvent.click(check)
+    expect(await screen.findByRole('heading', { name: 'Shop An' })).toBeInTheDocument()
+  })
+
   it('bị từ chối: hiện lý do và cho nộp lại', async () => {
     setup(mkUser('buyer'), (url) => (url.endsWith('/seller-applications/me') ? json(application('rejected', { reject_reason: 'Tên shop vi phạm' })) : undefined))
     expect(await screen.findByRole('alert')).toHaveTextContent('Tên shop vi phạm')
@@ -80,5 +97,42 @@ describe('Đăng ký người bán (nộp hồ sơ, chờ duyệt)', () => {
   it('seller vào trang đăng ký thì được chuyển tới trang shop', async () => {
     setup(mkUser('seller'), (url) => (url.endsWith('/shops/me') ? json(shop) : undefined))
     expect(await screen.findByRole('heading', { name: 'Shop An' })).toBeInTheDocument()
+  })
+})
+
+describe('Tổng quan shop', () => {
+  it.each(['lỗi mạng', 'lỗi máy chủ'])('tải lại thông tin shop sau %s', async (failure) => {
+    let resolveShop!: (response: Response) => void
+    const pendingShop = new Promise<Response>((resolve) => { resolveShop = resolve })
+    let attempts = 0
+    setup(mkUser('seller'), (url) => {
+      if (!url.endsWith('/shops/me')) return
+      attempts += 1
+      if (attempts === 2) return pendingShop
+      if (failure === 'lỗi mạng') return Promise.reject(new Error('Offline'))
+      return problem(503, 'unavailable', 'Máy chủ đang bận.')
+    }, '/seller')
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Thử lại' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Đang tải shop')
+    expect(screen.getByRole('link', { name: 'Tài khoản' })).toBeInTheDocument()
+
+    resolveShop(json(shop))
+    expect(await screen.findByRole('heading', { name: 'Shop An' })).toBeInTheDocument()
+    expect(screen.getByText('Hà Nội')).toBeInTheDocument()
+    expect(screen.getByText('1 thg 1, 2026')).toHaveAttribute('datetime', shop.created_at)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(attempts).toBe(2)
+  })
+
+  it('hướng dẫn liên hệ quản trị viên khi tài khoản chưa có shop liên kết', async () => {
+    setup(mkUser('seller'), (url) => (
+      url.endsWith('/shops/me') ? problem(404, 'shop-not-found', 'Bạn chưa có shop.') : undefined
+    ), '/seller')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Vui lòng liên hệ quản trị viên.')
+    expect(screen.queryByRole('button', { name: 'Thử lại' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Tài khoản' })).toBeInTheDocument()
   })
 })

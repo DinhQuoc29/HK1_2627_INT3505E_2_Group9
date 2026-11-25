@@ -91,8 +91,21 @@ describe('phân quyền route', () => {
   })
 
   it('buyer vào /seller được chuyển sang đăng ký bán hàng', async () => {
-    setup({ restore: 'buyer', initial: '/seller', route: (c) => (c.path === '/provinces' ? json([{ code: '01', name: 'Hà Nội' }]) : undefined) })
+    const calls = setup({ restore: 'buyer', initial: '/seller', route: (c) => (c.path === '/provinces' ? json([{ code: '01', name: 'Hà Nội' }]) : undefined) })
     expect(await screen.findByRole('heading', { name: 'Đăng ký bán hàng' })).toBeInTheDocument()
+    expect(calls.some((c) => c.path === '/shops/me')).toBe(false)
+  })
+
+  it('khách vào /seller được đưa tới đăng nhập', async () => {
+    const calls = setup({ restore: null, initial: '/seller', route: () => undefined })
+    expect(await screen.findByRole('button', { name: 'Đăng nhập' })).toBeInTheDocument()
+    expect(calls.some((c) => c.path === '/shops/me')).toBe(false)
+  })
+
+  it('admin vào /seller nhận trang 403', async () => {
+    const calls = setup({ restore: 'admin', initial: '/seller', route: () => undefined })
+    expect(await screen.findByRole('heading', { name: 'Bạn không có quyền truy cập trang này' })).toBeInTheDocument()
+    expect(calls.some((c) => c.path === '/shops/me')).toBe(false)
   })
 
   it('admin không được đăng ký bán hàng (403)', async () => {
@@ -100,11 +113,20 @@ describe('phân quyền route', () => {
     expect(await screen.findByText('Bạn không có quyền truy cập trang này')).toBeInTheDocument()
   })
 
-  it('menu và đăng xuất theo vai trò', async () => {
-    setup({ restore: 'seller', initial: '/account', route: () => undefined })
-    const nav = await screen.findByRole('navigation', { name: 'Điều hướng chính' })
-    expect(within(nav).getByRole('link', { name: 'Kênh người bán' })).toBeInTheDocument()
-    expect(within(nav).queryByRole('link', { name: 'Quản trị người dùng' })).not.toBeInTheDocument()
+  it('menu người bán đánh dấu đúng trang hiện tại và có thể đăng xuất', async () => {
+    setup({ restore: 'seller', initial: '/account', route: (c) => (c.path === '/shops/me' ? json(shop) : undefined) })
+    const navName = 'Điều hướng kênh người bán'
+    const accountNav = within(await screen.findByRole('navigation', { name: navName }))
+    expect(accountNav.getAllByRole('link')).toHaveLength(2)
+    expect(accountNav.getByRole('link', { name: 'Tài khoản' })).toHaveAttribute('aria-current', 'page')
+
+    await userEvent.click(accountNav.getByRole('link', { name: 'Tổng quan' }))
+    expect(await screen.findByRole('heading', { name: 'Shop An' })).toBeInTheDocument()
+    const dashboardNav = within(screen.getByRole('navigation', { name: navName }))
+    expect(dashboardNav.getByRole('link', { name: 'Tổng quan' })).toHaveAttribute('aria-current', 'page')
+
+    await userEvent.click(dashboardNav.getByRole('link', { name: 'Tài khoản' }))
+    expect(await screen.findByRole('heading', { name: 'Xin chào, Tên seller' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Đăng xuất' }))
     expect(await screen.findByRole('button', { name: 'Đăng nhập' })).toBeInTheDocument()
   })

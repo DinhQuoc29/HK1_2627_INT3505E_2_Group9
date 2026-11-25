@@ -90,7 +90,7 @@ Link trong email trỏ về `APP_BASE_URL` (frontend). Gửi chạy nền nên k
 | POST | `/auth/email-verifications/confirmation` | Xác minh bằng `token` trong link (dùng một lần) |
 | POST | `/auth/password-resets` | Yêu cầu đặt lại mật khẩu; **luôn 202** để không lộ email nào tồn tại |
 | POST | `/auth/password-resets/confirmation` | Đặt mật khẩu mới bằng `token`; thu hồi mọi phiên |
-| POST | `/seller-applications` | Buyer đã xác minh email nộp hồ sơ (`name`, `province_code`) |
+| POST | `/seller-applications` | Buyer đã xác minh email nộp hồ sơ (`name`, `province_code`) và nhận email xác nhận |
 | GET | `/seller-applications/me` | Hồ sơ gần nhất của tôi |
 | GET | `/admin/seller-applications` | Admin: danh sách (`status`, cursor) |
 | POST | `/admin/seller-applications/{id}/approval` | Admin duyệt: tạo shop + nâng seller + gửi email |

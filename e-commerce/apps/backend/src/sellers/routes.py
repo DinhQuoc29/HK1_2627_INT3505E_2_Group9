@@ -16,10 +16,17 @@ router = APIRouter(prefix="/api/v1")
 
 
 @router.post("/seller-applications", status_code=201, response_model=ApplicationOut)
-def submit_application(body: ApplyRequest, response: Response, auth: CurrentAuth = Depends(require_role("buyer", "seller", "admin"))):
+def submit_application(
+    body: ApplyRequest, response: Response, tasks: BackgroundTasks, request: Request,
+    auth: CurrentAuth = Depends(require_role("buyer", "seller", "admin")), st: Settings = Depends(get_settings),
+):
     """Buyer đã xác minh email nộp hồ sơ mở shop; admin duyệt thì mới thành seller."""
     with session_scope() as s:
         out = service.apply(s, auth.user.id, body.name, body.province_code)
+    tasks.add_task(
+        request.app.state.mailer.send,
+        emails.application_submitted_email(st, auth.user.email, auth.user.full_name, out.shop_name),
+    )
     response.headers["Cache-Control"] = "no-store"
     return out
 

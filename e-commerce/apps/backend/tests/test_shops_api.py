@@ -77,10 +77,17 @@ def test_apply_creates_pending_and_does_not_promote(client):
 
 
 def test_second_pending_application_conflicts(client):
-    _, _, h = _signup(client)
+    email, _, h = _signup(client)
     assert _apply(client, h).status_code == 201
     r = _apply(client, h)
     assert r.status_code == 409 and r.json()["type"] == "/problems/application-pending"
+    receipts = [
+        mail for mail in client.app.state.mailer.outbox
+        if mail.to == email and mail.subject == "Đã nhận hồ sơ đăng ký bán hàng"
+    ]
+    assert len(receipts) == 1
+    assert "Cửa hàng Của An" in receipts[0].text
+    assert "/seller/register" in receipts[0].text
 
 
 def test_validation_and_unknown_province(client):
@@ -117,13 +124,18 @@ def test_admin_approves_and_user_becomes_seller_with_same_token(client):
 
 def test_admin_rejects_with_reason_and_user_can_reapply(client):
     adm = _admin(client)
-    _, _, h = _signup(client)
+    email, _, h = _signup(client)
     app_id = _apply(client, h).json()["id"]
     assert client.post(f"/api/v1/admin/seller-applications/{app_id}/rejection", headers=adm, json={"reason": "x"}).status_code == 422
     r = client.post(f"/api/v1/admin/seller-applications/{app_id}/rejection", headers=adm, json={"reason": "Tên shop vi phạm"})
     assert r.status_code == 200 and r.json()["status"] == "rejected"
     mine = client.get("/api/v1/seller-applications/me", headers=h).json()
     assert mine["status"] == "rejected" and mine["reject_reason"] == "Tên shop vi phạm"
+    rejected = next(
+        mail for mail in client.app.state.mailer.outbox
+        if mail.to == email and mail.subject == "Hồ sơ người bán chưa được duyệt"
+    )
+    assert "Tên shop vi phạm" in rejected.text and "/seller/register" in rejected.text
     assert client.get("/api/v1/users/me", headers=h).json()["role"] == "buyer"
     assert _apply(client, h, "Shop nộp lại").status_code == 201
     assert client.get("/api/v1/seller-applications/me", headers=h).json()["status"] == "pending"
