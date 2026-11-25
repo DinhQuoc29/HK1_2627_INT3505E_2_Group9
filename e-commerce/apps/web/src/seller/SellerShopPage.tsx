@@ -4,7 +4,7 @@ import { useAuth } from '../shared/auth/AuthContext'
 import { AppShell } from '../shared/layout/AppShell'
 import { Alert, Button, Spinner } from '../shared/auth/components/ui'
 import { describeError } from '../shared/auth/errors'
-import { orderSecondary } from './orders/orderUi'
+import { orderSecondary } from '../shared/orders/orderUi'
 import { ShopEditor } from './shop/ShopEditor'
 import { ShopStatsPanel } from './shop/ShopStatsPanel'
 

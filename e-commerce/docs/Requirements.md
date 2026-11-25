@@ -46,4 +46,6 @@ Each requirement describes an observable outcome. Use-case IDs refer to [Use Cas
 | REQ-21 | Admins shall be able to inspect a reported review alongside its product, then retain or remove the review. A removed review shall disappear from public reviews and cease contributing to the aggregate rating. | A02 | ASM-14, ASM-15 |
 | REQ-22 | Admins shall be able to inspect a flagged listing and retain or withdraw it. Withdrawal shall prevent new purchases while preserving the item details in existing orders. | A03 | ASM-04, ASM-15 |
 
-**Open business rules.** The team still needs to define the cancellation cutoff for REQ-17, when an order counts as completed for REQ-19, and how rating filters treat unrated products for REQ-20.
+**Cancellation cutoff (REQ-17).** An order can be canceled while it is pending payment or paid. The seller's recorded handoff ends the cancellation window.
+
+**Open business rules.** The team still needs to define when an order counts as completed for REQ-19 and how rating filters treat unrated products for REQ-20.

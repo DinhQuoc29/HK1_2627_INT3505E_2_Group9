@@ -11,6 +11,7 @@ export type User = {
   email_verified: boolean // cần để đăng ký bán hàng
 }
 export type Provider = 'google' | 'facebook'
+export type PrivacyPreference = { personalization_enabled: boolean }
 export type AuthPayload = { access_token: string; token_type: 'Bearer'; expires_in: number; user: User }
 export type Province = { code: string; name: string }
 export type ApplicationStatus = 'pending' | 'approved' | 'rejected'
@@ -45,8 +46,43 @@ export type SellerProduct = Omit<ProductInput, 'description'> & {
   status: ProductStatus
 }
 export type SellerProductPage = { items: SellerProduct[]; has_more: boolean }
+
+export type CatalogCategory = { name: string; slug: string }
+export type CatalogCategoryGroup = CatalogCategory & { children: CatalogCategory[] }
+export type CatalogProduct = {
+  id: string
+  name: string
+  brand: string | null
+  price: number
+  in_stock: boolean
+  shop: Pick<Shop, 'id' | 'name' | 'province'>
+}
+export type CatalogProductCard = CatalogProduct & { image_url: string | null }
+export type CatalogProductPage = { items: CatalogProductCard[]; has_more: boolean }
+export type CatalogProductDetail = CatalogProduct & {
+  description: string | null
+  images: string[]
+  category: CatalogCategory
+  parent_category: CatalogCategory | null
+}
+
+export type CartLine = {
+  product_id: string
+  name: string
+  image_url: string | null
+  quantity: number
+  is_active: boolean
+  available_quantity: number
+  price_changed: boolean
+  unit_price_vnd: string
+  line_total_vnd: string
+}
+export type Cart = {
+  groups: { shop: CatalogProduct['shop']; items: CartLine[]; subtotal_vnd: string }[]
+  subtotal_vnd: string
+}
 export type OrderStatus = 'pending_payment' | 'paid' | 'shipping' | 'completed' | 'cancelled'
-export type SellerOrder = {
+export type Order = {
   id: string
   checkout_id: string
   shop: { id: string; name: string }
@@ -68,8 +104,27 @@ export type SellerOrder = {
   completed_at: string | null
   cancelled_at: string | null
   cancelled_by: 'buyer' | 'seller' | null
+  refunded_amount?: number
 }
-export type SellerOrderPage = { items: SellerOrder[]; next_cursor: string | null }
+export type OrderPage = { items: Order[]; next_cursor: string | null }
+export type SellerOrder = Order
+export type SellerOrderPage = OrderPage
+export type CheckoutRequest = {
+  items: { product_id: string; quantity: number; expected_unit_price: number }[]
+  shipping: Order['shipping']
+}
+export type CheckoutResult = {
+  id: string
+  total_amount: number
+  created_at: string
+  orders: Order[]
+  payment: {
+    id: string
+    status: 'pending' | 'succeeded' | 'failed' | 'cancelled'
+    amount: number
+    allocations: { order_id: string; amount: number; status: 'captured' | 'refunded' }[]
+  }
+}
 export type Role = User['role']
 export type AdminUser = { id: string; email: string; full_name: string; role: Role; status: 'active' | 'suspended'; created_at: string; has_shop: boolean }
 export type AdminUserPage = { items: AdminUser[]; next_cursor: string | null }
@@ -101,13 +156,14 @@ async function parse(res: Response): Promise<unknown> {
   return text ? JSON.parse(text) : null
 }
 
-async function request<T>(method: string, path: string, body?: unknown, auth = false): Promise<T> {
+async function request<T>(method: string, path: string, body?: unknown, auth = false, headers?: Record<string, string>): Promise<T> {
   let res: Response
   try {
     res = await fetch(BASE + path, {
       method,
       credentials: 'same-origin',
       headers: {
+        ...headers,
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         ...(auth && accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
@@ -116,8 +172,16 @@ async function request<T>(method: string, path: string, body?: unknown, auth = f
   } catch {
     throw new ApiError(0, 'network', 'Không kết nối được máy chủ. Kiểm tra mạng và thử lại.')
   }
+  if (res.ok) {
+    try {
+      const data = await parse(res)
+      if (data === null && res.status !== 204) throw new Error('Missing response body')
+      return data as T
+    } catch {
+      throw new ApiError(0, 'invalid-response', 'Máy chủ trả về dữ liệu không hợp lệ. Vui lòng thử lại.')
+    }
+  }
   const data = (await parse(res).catch(() => null)) as Record<string, unknown> | null
-  if (res.ok) return data as T
   const retry = Number(res.headers.get('Retry-After'))
   throw new ApiError(
     res.status,
@@ -144,9 +208,9 @@ export const setSessionHandlers = (h: SessionHandlers | null) => { handlers = h 
 const RECOVERABLE = new Set(['token-expired', 'missing-token', 'invalid-token'])
 
 /** Gọi API cần đăng nhập: access token hết hạn (15 phút) thì tự refresh một lần rồi thử lại. */
-async function authed<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function authed<T>(method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<T> {
   try {
-    return await request<T>(method, path, body, true)
+    return await request<T>(method, path, body, true, headers)
   } catch (e) {
     if (!(e instanceof ApiError) || e.status !== 401) throw e
     if (!RECOVERABLE.has(e.slug)) { handlers?.onExpired(); throw e } // vd phiên đã bị thu hồi
@@ -154,7 +218,7 @@ async function authed<T>(method: string, path: string, body?: unknown): Promise<
     try { payload = await refreshOnce() } catch { handlers?.onExpired(); throw e }
     setAccessToken(payload.access_token)
     handlers?.onRefreshed(payload)
-    return request<T>(method, path, body, true)
+    return request<T>(method, path, body, true, headers)
   }
 }
 
@@ -166,8 +230,33 @@ export const api = {
   refresh: refreshOnce,
   logout: () => request<null>('DELETE', '/auth/sessions/current', undefined, true),
   me: () => authed<User>('GET', '/users/me'),
+  privacyPreference: () => authed<PrivacyPreference>('GET', '/users/me/privacy-settings'),
+  setPrivacyPreference: (personalization_enabled: boolean) =>
+    authed<PrivacyPreference>('PUT', '/users/me/privacy-settings', { personalization_enabled }),
   linkIdentity: (provider: Provider, credential: string) => authed<User>('POST', '/users/me/identities', { provider, credential }),
   provinces: () => request<Province[]>('GET', '/provinces'),
+  catalogCategories: () => request<CatalogCategoryGroup[]>('GET', '/categories'),
+  catalogProducts: (query: URLSearchParams) =>
+    request<CatalogProductPage>('GET', `/products${query.size ? `?${query}` : ''}`),
+  catalogProduct: (id: string) => request<CatalogProductDetail>('GET', `/products/${encodeURIComponent(id)}`),
+  cart: () => authed<Cart>('GET', '/cart'),
+  addCartItem: (product_id: string, quantity: number) => authed<Cart>('POST', '/cart/items', { product_id, quantity }),
+  changeCartItem: (id: string, quantity: number) =>
+    authed<Cart>('PATCH', `/cart/items/${encodeURIComponent(id)}`, { quantity }),
+  removeCartItem: (id: string) => authed<Cart>('DELETE', `/cart/items/${encodeURIComponent(id)}`),
+  confirmCheckout: (key: string, body: CheckoutRequest) =>
+    authed<CheckoutResult>('POST', '/checkouts', body, { 'Idempotency-Key': key }),
+  checkoutResult: (id: string) => authed<CheckoutResult>('GET', `/checkouts/${encodeURIComponent(id)}`),
+  recoverCheckout: (key: string) =>
+    authed<CheckoutResult>('GET', `/checkouts?${new URLSearchParams({ confirmation_key: key })}`),
+  buyerOrders: ({ status, cursor }: { status?: OrderStatus; cursor?: string } = {}) => {
+    const query = new URLSearchParams()
+    if (status) query.set('status', status)
+    if (cursor) query.set('cursor', cursor)
+    return authed<OrderPage>('GET', `/orders${query.size ? `?${query}` : ''}`)
+  },
+  order: (id: string) => authed<Order>('GET', `/orders/${encodeURIComponent(id)}`),
+  cancelOrder: (id: string) => authed<Order>('POST', `/orders/${encodeURIComponent(id)}/cancellation`),
   applySeller: (b: { name: string; province_code: string }) => authed<SellerApplication>('POST', '/seller-applications', b),
   myApplication: () => authed<SellerApplication>('GET', '/seller-applications/me'),
   adminApplications: (query: { status?: ApplicationStatus | ''; cursor?: string; limit?: number }) => {
@@ -200,7 +289,6 @@ export const api = {
     if (cursor) query.set('cursor', cursor)
     return authed<SellerOrderPage>('GET', `/shops/me/orders${query.size ? `?${query}` : ''}`)
   },
-  sellerOrder: (id: string) => authed<SellerOrder>('GET', `/orders/${encodeURIComponent(id)}`),
   shipSellerOrder: (id: string) => authed<SellerOrder>('POST', `/orders/${encodeURIComponent(id)}/shipment`),
   completeSellerOrder: (id: string) => authed<SellerOrder>('POST', `/orders/${encodeURIComponent(id)}/completion`),
   changePassword: (b: { current_password?: string; new_password: string }) => authed<null>('PUT', '/users/me/password', b),
