@@ -56,5 +56,3 @@ Lỗi trả `application/problem+json`. Mật khẩu băm bcrypt; refresh token 
 - `src/orders/model.py`: Inventory, Checkout, Order, OrderItem
 - `src/orders/payments/model.py`: Payment, PaymentAllocation
 - `src/reviews/model.py`: Review
-
-Brand không có bảng riêng: là cột `products.brand` (VARCHAR(100), NULL được) dùng để lọc.
