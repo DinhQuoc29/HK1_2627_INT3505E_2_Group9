@@ -9,9 +9,41 @@ import { homeFor, roleLabel } from '../auth/roles'
 
 const nav = {
   buyer: [{ to: '/account', label: 'Tài khoản' }, { to: '/seller/register', label: 'Bán hàng' }],
-  seller: [{ to: '/seller', label: 'Kênh người bán' }, { to: '/account', label: 'Tài khoản' }],
   admin: [{ to: '/admin', label: 'Người dùng' }, { to: '/admin/sellers', label: 'Duyệt người bán' }, { to: '/account', label: 'Tài khoản' }],
 } as const
+
+const sellerNav = [
+  { to: '/seller', label: 'Tổng quan' },
+  { to: '/seller/products', label: 'Sản phẩm' },
+  { to: '/seller/orders', label: 'Đơn hàng' },
+  { to: '/account', label: 'Tài khoản' },
+] as const
+
+function SellerNavigation() {
+  return (
+    <nav
+      aria-label="Điều hướng kênh người bán"
+      className="grid grid-cols-2 gap-1 self-start rounded-2xl border border-zinc-200 bg-white p-2 text-sm font-medium sm:grid-cols-4 lg:grid-cols-1 dark:border-zinc-800 dark:bg-zinc-900"
+    >
+      {sellerNav.map(({ to, label }) => (
+        <NavLink
+          key={to}
+          to={to}
+          end={to !== '/seller/orders'}
+          className={({ isActive }) => [
+            'flex min-h-11 flex-1 items-center justify-center whitespace-nowrap rounded-xl px-2 py-2 transition sm:px-4 lg:justify-start',
+            'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
+            isActive
+              ? 'bg-brand-50 font-semibold text-brand-700 dark:bg-brand-900/35 dark:text-brand-100'
+              : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800',
+          ].join(' ')}
+        >
+          {label}
+        </NavLink>
+      ))}
+    </nav>
+  )
+}
 
 /** Nhắc xác minh email (cần để đăng ký bán hàng) kèm nút gửi lại. */
 function VerifyEmailBanner() {
@@ -41,17 +73,25 @@ export function AppShell({ children, width = 'max-w-3xl' }: { children: ReactNod
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   if (!user) return null
+  const { role } = user
+  const containerWidth = role === 'seller' ? 'max-w-6xl' : width
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950">
       <header className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <div className={`mx-auto flex min-h-16 flex-wrap items-center justify-between gap-3 px-5 py-2 ${width}`}>
+        <div className={`mx-auto flex min-h-16 flex-wrap items-center justify-between gap-3 px-5 py-2 ${containerWidth}`}>
           <div className="flex items-center gap-6">
-            <Link to={homeFor(user.role)} aria-label="Trang chủ"><Logo /></Link>
-            <nav aria-label="Điều hướng chính" className="flex gap-1 text-sm font-medium">
-              {nav[user.role].map((n) => (
-                <NavLink key={n.to} to={n.to} end className={({ isActive }) => `rounded-lg px-3 py-1.5 transition hover:bg-zinc-100 dark:hover:bg-zinc-800 ${isActive ? 'bg-brand-50 text-brand-700 dark:bg-zinc-800' : 'text-zinc-600 dark:text-zinc-300'}`}>{n.label}</NavLink>
-              ))}
-            </nav>
+            <Link to={homeFor(role)} aria-label="Trang chủ"><Logo /></Link>
+            {role === 'seller' ? (
+              <span className="hidden border-l border-zinc-200 pl-6 text-sm font-semibold text-zinc-600 sm:block dark:border-zinc-700 dark:text-zinc-300">
+                Kênh người bán
+              </span>
+            ) : (
+              <nav aria-label="Điều hướng chính" className="flex gap-1 text-sm font-medium">
+                {nav[role].map((n) => (
+                  <NavLink key={n.to} to={n.to} end className={({ isActive }) => `rounded-lg px-3 py-1.5 transition hover:bg-zinc-100 dark:hover:bg-zinc-800 ${isActive ? 'bg-brand-50 text-brand-700 dark:bg-zinc-800' : 'text-zinc-600 dark:text-zinc-300'}`}>{n.label}</NavLink>
+                ))}
+              </nav>
+            )}
           </div>
           <div className="flex items-center gap-3 text-sm">
             <span className="hidden text-right sm:block">
@@ -69,7 +109,14 @@ export function AppShell({ children, width = 'max-w-3xl' }: { children: ReactNod
         </div>
       </header>
       {!user.email_verified && <VerifyEmailBanner />}
-      <main className={`mx-auto space-y-6 px-5 py-10 ${width}`}>{children}</main>
+      {role === 'seller' ? (
+        <div className={`mx-auto grid gap-6 px-5 py-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:py-10 ${containerWidth}`}>
+          <SellerNavigation />
+          <main className="min-w-0 space-y-6">{children}</main>
+        </div>
+      ) : (
+        <main className={`mx-auto space-y-6 px-5 py-10 ${containerWidth}`}>{children}</main>
+      )}
     </div>
   )
 }

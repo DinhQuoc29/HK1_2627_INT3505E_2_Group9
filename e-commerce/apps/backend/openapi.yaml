@@ -4,11 +4,13 @@ info:
   version: 1.0.0
   description: |
     Accounts (đăng ký, đăng nhập, phiên), Checkout và Orders, Payments (giả lập), Inventory và Reviews.
-    Các endpoint Orders/Payments/Reviews/Inventory mới có đặc tả (design-first), chưa cài đặt.
+    Đã có danh sách đơn của shop, chi tiết đơn và cập nhật giao hàng.
+    Luồng tạo đơn, thanh toán, lịch sử đơn của buyer, hủy đơn, Reviews và API Inventory riêng mới có đặc tả.
 
     **Quy ước.** Path chữ thường, kebab-case, danh từ số nhiều; query snake_case. Tiền là số nguyên VND.
     Danh sách phân trang cursor `?limit=&cursor=` trả `{items, next_cursor}`. Chuyển trạng thái đơn mô hình hóa
     như tài nguyên con (`/orders/{id}/cancellation`, `/shipment`, `/completion`).
+    Sản phẩm của gian hàng dùng `?page=&limit=` và trả `{items, has_more}`.
 
     **Xác thực.** Access token là JWT (HS256, 15 phút) gửi qua `Authorization: Bearer`. Claim `sid` trỏ tới
     `auth_sessions`; mỗi request được bảo vệ đều kiểm tra phiên còn hiệu lực nên logout có hiệu lực ngay.
@@ -22,6 +24,7 @@ tags:
   - name: users
   - name: auth
   - name: shops
+  - name: catalog
   - name: admin
   - name: sellers
   - name: checkouts
@@ -453,7 +456,7 @@ paths:
             schema: { $ref: '#/components/schemas/CreateShopRequest' }
       responses:
         '201':
-          description: Đã nộp hồ sơ
+          description: Đã nộp hồ sơ và lên lịch gửi email xác nhận cho người nộp
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SellerApplication' }
@@ -596,6 +599,158 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
+    put:
+      tags: [shops]
+      summary: Cập nhật tên và tỉnh/thành của shop
+      description: Chỉ chủ shop được cập nhật thông tin gian hàng của mình.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateShopRequest' }
+      responses:
+        '200':
+          description: Thông tin shop sau khi lưu
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Shop' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/shops/me/statistics:
+    get:
+      tags: [shops]
+      summary: Thống kê đơn hàng và thanh toán của shop
+      description: |
+        Thống kê toàn thời gian. Doanh thu là tổng phân bổ đã thu từ các thanh toán mô phỏng thành công
+        của đơn paid, shipping hoặc completed. Đơn hủy và khoản đã hoàn không được tính vào doanh thu.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Thống kê shop
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ShopStatistics' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/shops/me/product-categories:
+    get:
+      tags: [catalog]
+      summary: Danh mục cấp 2 được chọn khi đăng sản phẩm
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ProductCategoryOption' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/shops/me/products:
+    get:
+      tags: [catalog]
+      summary: Danh sách sản phẩm của người bán
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: q, in: query, description: Tìm theo tên không phân biệt dấu, schema: { type: string, maxLength: 255 } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/SellerProductStatus' } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, maximum: 100000, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 12 } }
+      responses:
+        '200':
+          description: Sản phẩm thuộc đúng gian hàng đang đăng nhập
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, has_more]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/SellerProduct' }
+                  has_more: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+    post:
+      tags: [catalog]
+      summary: Đăng sản phẩm cùng ảnh và tồn kho
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SellerProductInput' }
+      responses:
+        '201':
+          description: Sản phẩm đã được tạo ở trạng thái active
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerProduct' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/shops/me/products/{product_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    put:
+      tags: [catalog]
+      summary: Sửa thông tin, ảnh và tồn kho của sản phẩm trong gian hàng
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SellerProductInput' }
+      responses:
+        '200':
+          description: Đã lưu sản phẩm
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerProduct' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/shops/me/products/{product_id}/status:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    patch:
+      tags: [catalog]
+      summary: Ẩn hoặc hiển thị lại sản phẩm
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              additionalProperties: false
+              properties:
+                status: { $ref: '#/components/schemas/SellerProductStatus' }
+      responses:
+        '200':
+          description: Trạng thái mới của sản phẩm
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerProduct' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
   /api/v1/checkouts:
     post:
       tags: [checkouts]
@@ -766,6 +921,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
   /api/v1/orders/{order_id}/cancellation:
     post:
       tags: [orders]
@@ -805,6 +961,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/InvalidTransition' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
   /api/v1/orders/{order_id}/completion:
     post:
       tags: [orders]
@@ -823,6 +980,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/InvalidTransition' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
   /api/v1/shops/me/orders:
     get:
       tags: [orders]
@@ -841,6 +999,8 @@ paths:
               schema: { $ref: '#/components/schemas/OrderPage' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/ValidationProblem' }
   /api/v1/products/{product_id}/inventory:
     get:
@@ -1110,6 +1270,67 @@ components:
             detail: Đơn đang ở trạng thái cancelled nên không thể hủy.
             instance: /api/v1/orders/0190a1b2-0000-7000-8000-00000000c003/cancellation
   schemas:
+    ShopStatistics:
+      type: object
+      required: [total_orders, orders_by_status, captured_orders, recorded_revenue_vnd]
+      properties:
+        total_orders: { type: integer, format: int64, minimum: 0 }
+        orders_by_status:
+          type: object
+          required: [pending_payment, paid, shipping, completed, cancelled]
+          additionalProperties: false
+          properties:
+            pending_payment: { type: integer, format: int64, minimum: 0 }
+            paid: { type: integer, format: int64, minimum: 0 }
+            shipping: { type: integer, format: int64, minimum: 0 }
+            completed: { type: integer, format: int64, minimum: 0 }
+            cancelled: { type: integer, format: int64, minimum: 0 }
+        captured_orders: { type: integer, format: int64, minimum: 0 }
+        recorded_revenue_vnd:
+          type: string
+          pattern: '^[0-9]+$'
+          description: Tổng doanh thu ghi nhận bằng VND, dạng chuỗi để giữ chính xác số nguyên lớn.
+    ProductCategoryOption:
+      type: object
+      required: [id, name, parent_name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        parent_name: { type: string }
+    SellerProductStatus: { type: string, enum: [active, inactive] }
+    SellerProductInput:
+      type: object
+      additionalProperties: false
+      required: [name, description, category_id, price, quantity, images]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        brand: { type: string, nullable: true, maxLength: 100 }
+        description: { type: string, minLength: 1, maxLength: 5000 }
+        category_id: { type: string, format: uuid }
+        price: { type: integer, format: int64, minimum: 1, maximum: 9007199254740991 }
+        quantity: { type: integer, format: int32, minimum: 0, maximum: 2147483647 }
+        images:
+          type: array
+          minItems: 1
+          maxItems: 8
+          description: URL HTTP hoặc HTTPS theo thứ tự, ảnh đầu tiên là ảnh đại diện
+          items: { type: string, format: uri, maxLength: 500 }
+    SellerProduct:
+      type: object
+      required: [id, name, brand, description, category_id, category_name, price, quantity, images, status]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        brand: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        category_id: { type: string, format: uuid }
+        category_name: { type: string }
+        price: { type: integer, format: int64 }
+        quantity: { type: integer, format: int32 }
+        images:
+          type: array
+          items: { type: string }
+        status: { $ref: '#/components/schemas/SellerProductStatus' }
     RegisterRequest:
       type: object
       required: [email, password, full_name]

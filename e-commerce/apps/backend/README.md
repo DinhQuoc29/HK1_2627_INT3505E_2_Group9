@@ -90,7 +90,7 @@ Link trong email trỏ về `APP_BASE_URL` (frontend). Gửi chạy nền nên k
 | POST | `/auth/email-verifications/confirmation` | Xác minh bằng `token` trong link (dùng một lần) |
 | POST | `/auth/password-resets` | Yêu cầu đặt lại mật khẩu; **luôn 202** để không lộ email nào tồn tại |
 | POST | `/auth/password-resets/confirmation` | Đặt mật khẩu mới bằng `token`; thu hồi mọi phiên |
-| POST | `/seller-applications` | Buyer đã xác minh email nộp hồ sơ (`name`, `province_code`) |
+| POST | `/seller-applications` | Buyer đã xác minh email nộp hồ sơ (`name`, `province_code`) và nhận email xác nhận |
 | GET | `/seller-applications/me` | Hồ sơ gần nhất của tôi |
 | GET | `/admin/seller-applications` | Admin: danh sách (`status`, cursor) |
 | POST | `/admin/seller-applications/{id}/approval` | Admin duyệt: tạo shop + nâng seller + gửi email |
@@ -99,6 +99,36 @@ Link trong email trỏ về `APP_BASE_URL` (frontend). Gửi chạy nền nên k
 Token email: ngẫu nhiên 48 byte, DB chỉ lưu SHA-256, dùng một lần (đánh dấu nguyên tử), phát hành token mới thì link cũ
 hết hiệu lực. Xác minh email có hiệu lực 24 giờ, đặt lại mật khẩu 60 phút. Đăng nhập Google tự coi email đã xác minh;
 đặt lại mật khẩu thành công cũng chứng minh sở hữu email. Admin tạo bằng script cũng được coi là đã xác minh.
+
+## Quản lý sản phẩm của người bán
+
+Các API dưới `/api/v1/shops/me/products` dành cho người bán có gian hàng. `GET` hỗ trợ tìm theo tên, lọc trạng thái và phân trang. `POST` đăng sản phẩm, `PUT /{product_id}` sửa thông tin và tồn kho, còn `PATCH /{product_id}/status` ẩn hoặc hiện lại sản phẩm. `GET /api/v1/shops/me/product-categories` trả danh mục cấp 2 để chọn trong biểu mẫu.
+
+Ảnh lưu dưới dạng URL HTTP hoặc HTTPS. Ảnh đầu danh sách làm ảnh đại diện. Tồn kho tính theo đơn vị nguyên, giá tính bằng VND.
+
+Database khởi tạo mới tự nạp danh mục từ migration 005. Với container local đã chạy từ trước, nạp danh mục bằng lệnh dưới đây. Lệnh có thể chạy lại.
+
+```powershell
+docker compose exec -T db psql -X -v ON_ERROR_STOP=1 -U ecommerce -d ecommerce -f /docker-entrypoint-initdb.d/005_seed_product_categories.sql
+```
+
+## Thông tin và thống kê gian hàng
+
+Người bán cập nhật tên và tỉnh/thành bằng `PUT /api/v1/shops/me`. `GET /api/v1/shops/me/statistics`
+trả số đơn toàn thời gian theo trạng thái và tổng doanh thu ghi nhận. Doanh thu cộng các phân bổ đã thu
+từ thanh toán mô phỏng thành công của đơn đã thanh toán, đang giao hoặc đã giao. Đơn hủy và phân bổ đã
+hoàn bị loại khỏi doanh thu. Số tiền VND được trả về dưới dạng chuỗi số nguyên.
+
+## Quản lý đơn hàng của người bán
+
+| API | Thao tác |
+| --- | --- |
+| `GET /api/v1/shops/me/orders` | Xem đơn của gian hàng, hỗ trợ bộ lọc `status` và phân trang bằng `next_cursor`. |
+| `GET /api/v1/orders/{order_id}` | Xem sản phẩm, số lượng, giá tại thời điểm đặt, thông tin nhận hàng và các mốc giao hàng. Người mua của đơn và chủ gian hàng có quyền xem. |
+| `POST /api/v1/orders/{order_id}/shipment` | Chủ gian hàng xác nhận đã bàn giao. Đơn chuyển từ `paid` sang `shipping`. |
+| `POST /api/v1/orders/{order_id}/completion` | Chủ gian hàng xác nhận đã giao. Đơn chuyển từ `shipping` sang `completed`. |
+
+Luồng này xử lý đơn đã có trong database. Hai thao tác xác nhận kiểm tra trạng thái trong cùng giao dịch với cập nhật và trả `409` nếu trạng thái hiện tại không cho phép chuyển.
 
 ## Entity
 - `src/accounts/model.py`: User, UserIdentity, AuthSession, PrivacySettings

@@ -32,6 +32,15 @@ def reset_password_email(st: Settings, to: str, name: str, token: str) -> Mail:
     return Mail(to, "Đặt lại mật khẩu", text, html)
 
 
+def application_submitted_email(st: Settings, to: str, name: str, shop_name: str) -> Mail:
+    text, html = _wrap(
+        [f"Chào {name},", f"Chúng tôi đã nhận hồ sơ mở shop \"{shop_name}\". Hồ sơ đang chờ duyệt.",
+         "Bạn sẽ nhận email khi quản trị viên xử lý hồ sơ."],
+        f"{st.app_base_url}/seller/register", "Xem trạng thái hồ sơ",
+    )
+    return Mail(to, "Đã nhận hồ sơ đăng ký bán hàng", text, html)
+
+
 def application_approved_email(st: Settings, to: str, name: str, shop_name: str) -> Mail:
     link = f"{st.app_base_url}/seller"
     text, html = _wrap([f"Chào {name},", f"Hồ sơ mở shop \"{shop_name}\" của bạn đã được duyệt. Bạn có thể bắt đầu bán hàng ngay."], link, "Vào kênh người bán")

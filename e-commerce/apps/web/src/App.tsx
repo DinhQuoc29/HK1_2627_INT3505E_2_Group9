@@ -3,6 +3,9 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import AccountPage from './buyer/AccountPage'
 import SellerRegisterPage from './seller/SellerRegisterPage'
 import SellerShopPage from './seller/SellerShopPage'
+import SellerProductsPage from './seller/products/SellerProductsPage'
+import SellerOrdersPage from './seller/orders/SellerOrdersPage'
+import SellerOrderDetailPage from './seller/orders/SellerOrderDetailPage'
 import { AuthProvider } from './shared/auth/AuthContext'
 import AdminSellerApplicationsPage from './admin/AdminSellerApplicationsPage'
 import AdminUsersPage from './admin/AdminUsersPage'
@@ -38,9 +41,12 @@ export function AppRoutes() {
               <Route path="/account" element={<AccountPage />} />
               <Route element={<RoleRoute roles={['buyer', 'seller']} />}>
                 <Route path="/seller/register" element={<SellerRegisterPage />} />
-              </Route>
-              <Route element={<RoleRoute roles={['seller']} redirectTo="/seller/register" />}>
-                <Route path="/seller" element={<SellerShopPage />} />
+                <Route element={<RoleRoute roles={['seller']} redirectTo="/seller/register" />}>
+                  <Route path="/seller" element={<SellerShopPage />} />
+                  <Route path="/seller/products" element={<SellerProductsPage />} />
+                  <Route path="/seller/orders" element={<SellerOrdersPage />} />
+                  <Route path="/seller/orders/:orderId" element={<SellerOrderDetailPage />} />
+                </Route>
               </Route>
               <Route element={<RoleRoute roles={['admin']} />}>
                 <Route path="/admin" element={<AdminUsersPage />} />

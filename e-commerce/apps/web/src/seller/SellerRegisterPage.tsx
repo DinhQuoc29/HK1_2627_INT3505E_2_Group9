@@ -15,15 +15,28 @@ export default function SellerRegisterPage() {
   const [provinces, setProvinces] = useState<Province[] | null>(null)
   const [application, setApplication] = useState<SellerApplication | null | undefined>(undefined) // undefined: đang tải
   const [formError, setFormError] = useState<string>()
+  const [checking, setChecking] = useState(false)
 
   const loadApplication = useCallback(async () => {
-    try { setApplication(await api.myApplication()) } catch (e) {
+    setChecking(true)
+    setFormError(undefined)
+    try {
+      const latest = await api.myApplication()
+      setApplication(latest)
+      if (latest.status === 'approved') await refreshUser()
+    } catch (e) {
       if (e instanceof ApiError && e.status === 404) setApplication(null)
-      else { setApplication(null); setFormError(describeError(e).message) }
+      else {
+        setApplication((current) => current ?? null)
+        setFormError(describeError(e).message ?? 'Không kiểm tra được trạng thái hồ sơ.')
+      }
+    } finally {
+      setChecking(false)
     }
-  }, [])
+  }, [refreshUser])
 
   useEffect(() => {
+    if (user?.role !== 'buyer') return
     let cancelled = false
     api.provinces().then(
       (p) => { if (!cancelled) setProvinces(p) },
@@ -31,12 +44,7 @@ export default function SellerRegisterPage() {
     )
     void loadApplication()
     return () => { cancelled = true }
-  }, [loadApplication])
-
-  // Hồ sơ đã được duyệt trong lúc đang mở trang: tải lại hồ sơ người dùng để role thành seller.
-  useEffect(() => {
-    if (application?.status === 'approved' && user?.role === 'buyer') void refreshUser()
-  }, [application?.status, user?.role, refreshUser])
+  }, [loadApplication, user?.role])
 
   const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<ShopValues>({
     resolver: zodResolver(shopSchema),
@@ -58,6 +66,7 @@ export default function SellerRegisterPage() {
   })
 
   const pending = application?.status === 'pending'
+  const approved = application?.status === 'approved'
   const needsVerification = !user?.email_verified
 
   return (
@@ -68,12 +77,19 @@ export default function SellerRegisterPage() {
         {formError && <Alert>{formError}</Alert>}
         {application === undefined || provinces === null ? (
           <Spinner label="Đang tải…" />
-        ) : pending ? (
-          <div role="status" aria-label="Hồ sơ đang chờ duyệt" className="space-y-2">
-            <p className="inline-block rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">Đang chờ duyệt</p>
-            <p className="font-semibold">{application.shop_name}</p>
-            <p className="text-sm text-zinc-500">{application.province_name} · nộp ngày {new Date(application.created_at).toLocaleDateString('vi-VN')}</p>
-            <p className="text-sm text-zinc-500">Bạn sẽ nhận email khi hồ sơ được xử lý.</p>
+        ) : pending || approved ? (
+          <div className="space-y-4">
+            {pending ? (
+              <div role="status" aria-label="Hồ sơ đang chờ duyệt" className="space-y-2">
+                <p className="inline-block rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">Đang chờ duyệt</p>
+                <p className="font-semibold">{application.shop_name}</p>
+                <p className="text-sm text-zinc-500">{application.province_name} · nộp ngày {new Date(application.created_at).toLocaleDateString('vi-VN')}</p>
+                <p className="text-sm text-zinc-500">Bạn sẽ nhận email khi hồ sơ được xử lý.</p>
+              </div>
+            ) : (
+              <Alert tone="success">Hồ sơ đã được duyệt.</Alert>
+            )}
+            <Button type="button" loading={checking} onClick={loadApplication}>Kiểm tra trạng thái</Button>
           </div>
         ) : (
           <>
