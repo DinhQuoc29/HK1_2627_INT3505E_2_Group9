@@ -154,4 +154,6 @@ def current_auth(
     if row is None:
         raise ProblemError(401, "session-ended", "Phiên đăng nhập đã kết thúc, vui lòng đăng nhập lại.")
     session, user = row
+    if user.status != "active":
+        raise ProblemError(403, "account-suspended", "Tài khoản của bạn đã bị tạm khóa. Vui lòng liên hệ quản trị viên.")
     return CurrentAuth(user=user, session=session)

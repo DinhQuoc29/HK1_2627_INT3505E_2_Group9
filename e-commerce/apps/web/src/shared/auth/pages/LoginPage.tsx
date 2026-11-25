@@ -7,6 +7,7 @@ import { AuthLayout } from '../components/AuthLayout'
 import { SocialSignIn } from '../components/SocialSignIn'
 import { Alert, Button, Divider, PasswordField, TextField } from '../components/ui'
 import { describeError, safeRedirect } from '../errors'
+import { homeFor } from '../roles'
 import { loginSchema, type LoginValues } from '../schemas'
 
 export default function LoginPage() {
@@ -15,7 +16,8 @@ export default function LoginPage() {
   const location = useLocation()
   const [formError, setFormError] = useState<string>()
   const [googleBusy, setGoogleBusy] = useState(false)
-  const to = safeRedirect((location.state as { from?: string } | null)?.from)
+  const from = (location.state as { from?: string } | null)?.from
+  const dest = (u: { role: Parameters<typeof homeFor>[0] }) => safeRedirect(from, homeFor(u.role))
 
   const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -31,17 +33,15 @@ export default function LoginPage() {
   const onSubmit = handleSubmit(async (v) => {
     setFormError(undefined)
     try {
-      await login(v)
-      navigate(to, { replace: true })
+      navigate(dest(await login(v)), { replace: true })
     } catch (e) { fail(e) }
   })
 
-  const social = (fn: (token: string) => Promise<void>) => async (token: string) => {
+  const social = (fn: (token: string) => Promise<{ role: Parameters<typeof homeFor>[0] }>) => async (token: string) => {
     setFormError(undefined)
     setGoogleBusy(true)
     try {
-      await fn(token)
-      navigate(to, { replace: true })
+      navigate(dest(await fn(token)), { replace: true })
     } catch (e) { fail(e) } finally { setGoogleBusy(false) }
   }
 
@@ -56,6 +56,7 @@ export default function LoginPage() {
       <form onSubmit={onSubmit} noValidate className="space-y-4">
         <TextField label="Email" type="email" autoComplete="email" inputMode="email" placeholder="ban@example.com" autoFocus error={errors.email?.message} {...register('email')} />
         <PasswordField label="Mật khẩu" autoComplete="current-password" placeholder="Nhập mật khẩu" error={errors.password?.message} {...register('password')} />
+        <div className="-mt-2 text-right"><Link to="/forgot-password" className="text-sm font-medium text-brand-600 hover:underline">Quên mật khẩu?</Link></div>
         <Button type="submit" loading={isSubmitting}>Đăng nhập</Button>
       </form>
       <Divider>hoặc</Divider>

@@ -17,6 +17,7 @@ from db import SessionLocal
 # Import toàn bộ entity để metadata đầy đủ.
 import accounts.model  # noqa: F401
 import cart.model  # noqa: F401
+import sellers.model  # noqa: F401
 import catalog.model  # noqa: F401
 import orders.model  # noqa: F401
 import orders.payments.model  # noqa: F401

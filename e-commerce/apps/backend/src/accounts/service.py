@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from accounts import authentication as auth
 from accounts import repository
-from accounts.model import AuthSession, Role, User
+from accounts.model import AuthSession, EmailToken, EmailTokenPurpose, Role, User, UserStatus
 from accounts.schema import UserOut
 from common.errors import ProblemError
 from config import Settings
@@ -28,6 +28,7 @@ class IssuedSession:
     user: UserOut
     access_token: str
     refresh_token: str
+    verify_token: str | None = None  # token xác minh email vừa phát hành (đăng ký mới); route gửi email
 
 
 def profile(s: Session, user: User) -> UserOut:
@@ -35,10 +36,17 @@ def profile(s: Session, user: User) -> UserOut:
     return UserOut(
         id=user.id, email=user.email, full_name=user.full_name, role=user.role, created_at=user.created_at,
         providers=repository.list_providers(s, user.id), has_password=bool(user.password_hash),
+        email_verified=user.email_verified_at is not None,
     )
 
 
+def ensure_active(user: User) -> None:
+    if user.status != UserStatus.ACTIVE.value:
+        raise ProblemError(403, "account-suspended", "Tài khoản của bạn đã bị tạm khóa. Vui lòng liên hệ quản trị viên.")
+
+
 def _open_session(s: Session, st: Settings, user: User) -> IssuedSession:
+    ensure_active(user)
     refresh, refresh_hash = auth.new_refresh_token()
     session = repository.add_session(
         s,
@@ -64,7 +72,9 @@ def register(s: Session, st: Settings, email: str, password: str, full_name: str
     except IntegrityError:  # hai request đăng ký trùng email chạy đồng thời
         raise ProblemError(409, "email-already-registered", "Email này đã được đăng ký.")
     log.info("user_registered user_id=%s", user.id)
-    return _open_session(s, st, user)
+    issued = _open_session(s, st, user)
+    issued.verify_token = _issue_email_token(s, user, EmailTokenPurpose.VERIFY_EMAIL, timedelta(hours=st.verify_token_hours))
+    return issued
 
 
 def login(s: Session, st: Settings, email: str, password: str) -> IssuedSession:
@@ -106,6 +116,7 @@ def refresh(s: Session, st: Settings, refresh_token: str | None) -> IssuedSessio
     if session is None or session.revoked_at is not None or session.expires_at <= now:
         raise ProblemError(401, "invalid-refresh-token", "Phiên đã hết hạn, vui lòng đăng nhập lại.")
     user = repository.get_user(s, session.user_id)
+    ensure_active(user)
     new_refresh, new_hash = auth.new_refresh_token()
     session.refresh_token_hash = new_hash
     s.flush()
@@ -148,6 +159,7 @@ def login_with_google(s: Session, st: Settings, credential: str) -> IssuedSessio
                 s, User(id=new_id(), email=email, full_name=name, password_hash=None, role=Role.BUYER.value)
             )
         repository.add_identity(s, user.id, "google", subject)
+    repository.mark_email_verified(s, user, utcnow())  # Google đã xác minh email (email_verified = true)
     return _open_session(s, st, user)
 
 
@@ -236,3 +248,84 @@ def unlink_provider(s: Session, user: User, provider: str) -> None:
         )
     repository.delete_identity(s, user.id, provider)
     log.info("identity_unlinked user_id=%s provider=%s", user.id, provider)
+
+
+def change_password(s: Session, user: User, sid, current_password: str | None, new_password: str) -> None:
+    """Đổi (hoặc đặt lần đầu cho tài khoản chỉ có Google/Facebook) mật khẩu; thu hồi mọi phiên khác."""
+    user = repository.get_user(s, user.id)
+    if user.password_hash:
+        if not current_password or not auth.verify_password(current_password, user.password_hash):
+            raise ProblemError(
+                422, "validation-error", "Dữ liệu gửi lên không hợp lệ.",
+                errors=[{"field": "current_password", "message": "Mật khẩu hiện tại không đúng."}],
+            )
+        if auth.verify_password(new_password, user.password_hash):
+            raise ProblemError(
+                422, "validation-error", "Dữ liệu gửi lên không hợp lệ.",
+                errors=[{"field": "new_password", "message": "Mật khẩu mới phải khác mật khẩu hiện tại."}],
+            )
+    repository.set_password_hash(s, user, auth.hash_password(new_password))
+    repository.revoke_all_sessions(s, user.id, utcnow(), except_sid=sid)
+    log.info("password_changed user_id=%s", user.id)
+
+
+# ---- Token email: xác minh email và đặt lại mật khẩu ----------------------------------------------------------
+
+def _issue_email_token(s: Session, user: User, purpose: EmailTokenPurpose, ttl: timedelta) -> str:
+    raw, token_hash = auth.new_refresh_token()
+    now = utcnow()
+    repository.add_email_token(s, EmailToken(
+        id=new_id(), user_id=user.id, purpose=purpose.value, token_hash=token_hash, expires_at=now + ttl, created_at=now,
+    ))
+    return raw
+
+
+def _cooldown_left(s: Session, st: Settings, user: User, purpose: EmailTokenPurpose) -> int:
+    last = repository.latest_email_token(s, user.id, purpose.value)
+    if last is None:
+        return 0
+    return max(0, int(st.email_resend_cooldown_seconds - (utcnow() - last.created_at).total_seconds()) + 1)
+
+
+def request_email_verification(s: Session, st: Settings, user: User) -> str:
+    user = repository.get_user(s, user.id)
+    if user.email_verified_at is not None:
+        raise ProblemError(409, "email-already-verified", "Email của bạn đã được xác minh.")
+    wait = _cooldown_left(s, st, user, EmailTokenPurpose.VERIFY_EMAIL)
+    if wait:
+        raise ProblemError(
+            429, "rate-limited", "Bạn vừa yêu cầu gửi email. Vui lòng đợi một chút rồi thử lại.",
+            headers={"Retry-After": str(wait)},
+        )
+    return _issue_email_token(s, user, EmailTokenPurpose.VERIFY_EMAIL, timedelta(hours=st.verify_token_hours))
+
+
+def confirm_email(s: Session, token: str) -> None:
+    now = utcnow()
+    user_id = repository.consume_email_token(s, auth.hash_token(token), EmailTokenPurpose.VERIFY_EMAIL.value, now)
+    if user_id is None:
+        raise ProblemError(400, "invalid-email-token", "Liên kết xác minh không hợp lệ hoặc đã hết hạn.")
+    repository.mark_email_verified(s, repository.get_user(s, user_id), now)
+    log.info("email_verified user_id=%s", user_id)
+
+
+def request_password_reset(s: Session, st: Settings, email: str) -> tuple[User, str] | None:
+    """Trả (user, token) để gửi email, hoặc None. Route luôn trả 202 như nhau để không lộ email có tồn tại."""
+    user = repository.get_user_by_email(s, email)
+    if user is None or user.status != UserStatus.ACTIVE.value:
+        return None
+    if _cooldown_left(s, st, user, EmailTokenPurpose.RESET_PASSWORD):
+        return None  # chống dùng tính năng này để spam hộp thư của người khác
+    return user, _issue_email_token(s, user, EmailTokenPurpose.RESET_PASSWORD, timedelta(minutes=st.reset_token_minutes))
+
+
+def confirm_password_reset(s: Session, token: str, new_password: str) -> None:
+    now = utcnow()
+    user_id = repository.consume_email_token(s, auth.hash_token(token), EmailTokenPurpose.RESET_PASSWORD.value, now)
+    if user_id is None:
+        raise ProblemError(400, "invalid-reset-token", "Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.")
+    user = repository.get_user(s, user_id)
+    repository.set_password_hash(s, user, auth.hash_password(new_password))
+    repository.mark_email_verified(s, user, now)  # đã nhận được email nên đã chứng minh sở hữu địa chỉ
+    repository.revoke_all_sessions(s, user.id, now)  # mọi thiết bị phải đăng nhập lại
+    log.info("password_reset user_id=%s", user.id)

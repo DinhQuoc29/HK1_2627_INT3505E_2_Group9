@@ -7,6 +7,7 @@ import { AuthLayout } from '../components/AuthLayout'
 import { SocialSignIn } from '../components/SocialSignIn'
 import { Alert, Button, Divider, PasswordField, TextField } from '../components/ui'
 import { describeError, safeRedirect } from '../errors'
+import { homeFor } from '../roles'
 import { registerSchema, type RegisterValues } from '../schemas'
 
 export default function RegisterPage() {
@@ -14,7 +15,8 @@ export default function RegisterPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [formError, setFormError] = useState<string>()
-  const to = safeRedirect((location.state as { from?: string } | null)?.from)
+  const from = (location.state as { from?: string } | null)?.from
+  const dest = (u: { role: Parameters<typeof homeFor>[0] }) => safeRedirect(from, homeFor(u.role))
 
   const { register, handleSubmit, setError, control, formState: { errors, isSubmitting } } = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
@@ -31,16 +33,14 @@ export default function RegisterPage() {
   const onSubmit = handleSubmit(async ({ confirm: _confirm, ...v }) => {
     setFormError(undefined)
     try {
-      await signUp(v)
-      navigate(to, { replace: true })
+      navigate(dest(await signUp(v)), { replace: true })
     } catch (e) { fail(e) }
   })
 
-  const social = (fn: (token: string) => Promise<void>) => async (token: string) => {
+  const social = (fn: (token: string) => Promise<{ role: Parameters<typeof homeFor>[0] }>) => async (token: string) => {
     setFormError(undefined)
     try {
-      await fn(token)
-      navigate(to, { replace: true })
+      navigate(dest(await fn(token)), { replace: true })
     } catch (e) { fail(e) }
   }
 
