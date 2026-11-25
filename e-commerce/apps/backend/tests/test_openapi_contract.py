@@ -9,6 +9,12 @@ from app import create_app
 
 SPEC_PATH = pathlib.Path(__file__).resolve().parent.parent / "openapi.yaml"
 IMPLEMENTED_TAGS = {"users", "auth", "shops", "admin", "sellers", "catalog"}
+IMPLEMENTED_ORDER_ROUTES = {
+    ("get", "/api/v1/shops/me/orders"),
+    ("get", "/api/v1/orders/{order_id}"),
+    ("post", "/api/v1/orders/{order_id}/shipment"),
+    ("post", "/api/v1/orders/{order_id}/completion"),
+}
 HTTP = {"get", "post", "put", "patch", "delete"}
 
 
@@ -42,7 +48,7 @@ def test_every_implemented_route_is_documented(spec, implemented):
 
 
 def test_documented_routes_of_implemented_modules_exist(spec, implemented):
-    assert _documented(spec, IMPLEMENTED_TAGS) - implemented == set()
+    assert (_documented(spec, IMPLEMENTED_TAGS) | IMPLEMENTED_ORDER_ROUTES) - implemented == set()
 
 
 def test_error_responses_are_problem_json(spec):

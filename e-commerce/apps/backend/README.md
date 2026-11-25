@@ -112,6 +112,17 @@ Database khởi tạo mới tự nạp danh mục từ migration 005. Với cont
 docker compose exec -T db psql -X -v ON_ERROR_STOP=1 -U ecommerce -d ecommerce -f /docker-entrypoint-initdb.d/005_seed_product_categories.sql
 ```
 
+## Quản lý đơn hàng của người bán
+
+| API | Thao tác |
+| --- | --- |
+| `GET /api/v1/shops/me/orders` | Xem đơn của gian hàng, hỗ trợ bộ lọc `status` và phân trang bằng `next_cursor`. |
+| `GET /api/v1/orders/{order_id}` | Xem sản phẩm, số lượng, giá tại thời điểm đặt, thông tin nhận hàng và các mốc giao hàng. Người mua của đơn và chủ gian hàng có quyền xem. |
+| `POST /api/v1/orders/{order_id}/shipment` | Chủ gian hàng xác nhận đã bàn giao. Đơn chuyển từ `paid` sang `shipping`. |
+| `POST /api/v1/orders/{order_id}/completion` | Chủ gian hàng xác nhận đã giao. Đơn chuyển từ `shipping` sang `completed`. |
+
+Luồng này xử lý đơn đã có trong database. Hai thao tác xác nhận kiểm tra trạng thái trong cùng giao dịch với cập nhật và trả `409` nếu trạng thái hiện tại không cho phép chuyển.
+
 ## Entity
 - `src/accounts/model.py`: User, UserIdentity, AuthSession, PrivacySettings
 - `src/catalog/model.py`: Province, Shop, Category, Product, ProductImage

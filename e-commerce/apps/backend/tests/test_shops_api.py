@@ -1,5 +1,6 @@
 """Đăng ký người bán qua hồ sơ + admin duyệt: buyer (đã xác minh email) -> pending -> approved -> seller + shop."""
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from fastapi.testclient import TestClient
@@ -161,6 +162,86 @@ def test_decision_emails_are_sent(client):
     app_id = _apply(client, h).json()["id"]
     client.post(f"/api/v1/admin/seller-applications/{app_id}/approval", headers=adm)
     assert any(m.to == email and "được duyệt" in m.subject for m in mailer.outbox)
+
+
+def test_order_fulfillment_is_scoped_to_the_shop_and_serialized(client):
+    admin = _admin(client)
+    _, buyer_id, buyer = _signup(client)
+    sellers = []
+    for index in range(2):
+        _, _, headers = _signup(client)
+        application = _apply(client, headers, name=f"Gian hàng giao đơn {index}").json()["id"]
+        approved = client.post(f"/api/v1/admin/seller-applications/{application}/approval", headers=admin)
+        assert approved.status_code == 200
+        sellers.append((headers, client.get("/api/v1/shops/me", headers=headers).json()["id"]))
+    (owner, shop_id), (other, other_shop_id) = sellers
+    checkout_id, another_checkout_id, order_id, second_id, sibling_id, category_id, product_id = [uuid.uuid4() for _ in range(7)]
+
+    with engine.begin() as db:
+        db.execute(text("insert into categories (id,name,slug,level) values (:id,:name,:name,1)"),
+                   {"id": category_id, "name": f"order-test-{category_id}"})
+        db.execute(text(
+            "insert into products (id,shop_id,category_id,name,name_normalized,price) "
+            "values (:id,:shop,:category,'Tên hiện tại','ten hien tai',250000)"
+        ), {"id": product_id, "shop": shop_id, "category": category_id})
+        db.execute(text(
+            "insert into checkouts (id,buyer_id,idempotency_key,request_hash,total_amount) "
+            "values (:id,:buyer,:key,:hash,100000)"
+        ), [{"id": id_, "buyer": buyer_id, "key": str(id_), "hash": "0" * 64}
+            for id_ in (checkout_id, another_checkout_id)])
+        db.execute(text(
+            "insert into orders (id,checkout_id,buyer_id,shop_id,status,total_amount,"
+            " shipping_name,shipping_phone,shipping_address,paid_at,created_at) "
+            "values (:id,:checkout,:buyer,:shop,'paid',100000,'Recipient','0900000000','Test address',now(),now())"
+        ), [
+            {"id": order_id, "checkout": checkout_id, "buyer": buyer_id, "shop": shop_id},
+            {"id": second_id, "checkout": another_checkout_id, "buyer": buyer_id, "shop": shop_id},
+            {"id": sibling_id, "checkout": checkout_id, "buyer": buyer_id, "shop": other_shop_id},
+        ])
+        db.execute(text(
+            "insert into order_items (id,order_id,product_id,product_name,unit_price,quantity,line_total) "
+            "values (:id,:order,:product,'Tên lúc mua',50000,2,100000)"
+        ), {"id": uuid.uuid4(), "order": order_id, "product": product_id})
+
+    try:
+        shop_orders = "/api/v1/shops/me/orders"
+        detail = f"/api/v1/orders/{order_id}"
+        first = client.get(shop_orders, headers=owner, params={"status": "paid", "limit": 1})
+        assert first.status_code == 200 and first.headers["cache-control"] == "no-store"
+        page = first.json()
+        assert len(page["items"]) == 1 and page["next_cursor"]
+        following = client.get(shop_orders, headers=owner, params={"status": "paid", "limit": 1, "cursor": page["next_cursor"]}).json()
+        assert {page["items"][0]["id"], following["items"][0]["id"]} == {str(order_id), str(second_id)}
+        assert following["next_cursor"] is None
+        assert client.get(shop_orders, headers=owner, params={"cursor": "wrong"}).status_code == 400
+        assert client.get(shop_orders, headers=buyer).status_code == 403
+        assert client.get(detail, headers=other).status_code == 403
+        assert client.post(f"{detail}/shipment", headers=other).status_code == 403
+        assert client.post(f"{detail}/shipment", headers=buyer).status_code == 403
+        assert client.post(f"{detail}/completion", headers=owner).status_code == 409
+
+        order = client.get(detail, headers=buyer).json()
+        assert order["items"][0]["product_name"] == "Tên lúc mua"
+        assert order["items"][0]["unit_price"] == 50000 and order["items"][0]["quantity"] == 2
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            attempts = list(executor.map(lambda _: client.post(f"{detail}/shipment", headers=owner), range(2)))
+        assert sorted(response.status_code for response in attempts) == [200, 409]
+        shipping = next(response.json() for response in attempts if response.status_code == 200)
+        assert shipping["status"] == "shipping" and shipping["shipped_at"]
+        done = client.post(f"{detail}/completion", headers=owner)
+        assert done.status_code == 200 and done.json()["status"] == "completed"
+        assert done.json()["shipped_at"] == shipping["shipped_at"] and done.json()["completed_at"]
+        assert client.get(detail, headers=buyer).json()["status"] == "completed"
+        assert client.get(f"/api/v1/orders/{sibling_id}", headers=other).json()["status"] == "paid"
+        assert client.post(f"{detail}/completion", headers=owner).status_code == 409
+    finally:
+        with engine.begin() as db:
+            db.execute(text("delete from orders where checkout_id in (:first,:second)"),
+                       {"first": checkout_id, "second": another_checkout_id})
+            db.execute(text("delete from checkouts where id in (:first,:second)"),
+                       {"first": checkout_id, "second": another_checkout_id})
+            db.execute(text("delete from products where id=:id"), {"id": product_id})
+            db.execute(text("delete from categories where id=:id"), {"id": category_id})
 
 
 def test_seller_products_save_images_stock_and_respect_shop_ownership(client):

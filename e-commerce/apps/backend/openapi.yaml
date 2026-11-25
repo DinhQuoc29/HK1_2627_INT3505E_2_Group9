@@ -4,7 +4,8 @@ info:
   version: 1.0.0
   description: |
     Accounts (đăng ký, đăng nhập, phiên), Checkout và Orders, Payments (giả lập), Inventory và Reviews.
-    Các endpoint Orders/Payments/Reviews/Inventory mới có đặc tả (design-first), chưa cài đặt.
+    Đã có danh sách đơn của shop, chi tiết đơn và cập nhật giao hàng.
+    Luồng tạo đơn, thanh toán, lịch sử đơn của buyer, hủy đơn, Reviews và API Inventory riêng mới có đặc tả.
 
     **Quy ước.** Path chữ thường, kebab-case, danh từ số nhiều; query snake_case. Tiền là số nguyên VND.
     Danh sách phân trang cursor `?limit=&cursor=` trả `{items, next_cursor}`. Chuyển trạng thái đơn mô hình hóa
@@ -882,6 +883,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
   /api/v1/orders/{order_id}/cancellation:
     post:
       tags: [orders]
@@ -921,6 +923,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/InvalidTransition' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
   /api/v1/orders/{order_id}/completion:
     post:
       tags: [orders]
@@ -939,6 +942,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/InvalidTransition' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
   /api/v1/shops/me/orders:
     get:
       tags: [orders]
@@ -957,6 +961,8 @@ paths:
               schema: { $ref: '#/components/schemas/OrderPage' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/ValidationProblem' }
   /api/v1/products/{product_id}/inventory:
     get:

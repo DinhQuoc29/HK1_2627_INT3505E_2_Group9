@@ -15,6 +15,7 @@ const nav = {
 const sellerNav = [
   { to: '/seller', label: 'Tổng quan' },
   { to: '/seller/products', label: 'Sản phẩm' },
+  { to: '/seller/orders', label: 'Đơn hàng' },
   { to: '/account', label: 'Tài khoản' },
 ] as const
 
@@ -22,13 +23,13 @@ function SellerNavigation() {
   return (
     <nav
       aria-label="Điều hướng kênh người bán"
-      className="flex flex-wrap gap-1 self-start rounded-2xl border border-zinc-200 bg-white p-2 text-sm font-medium lg:flex-col dark:border-zinc-800 dark:bg-zinc-900"
+      className="grid grid-cols-2 gap-1 self-start rounded-2xl border border-zinc-200 bg-white p-2 text-sm font-medium sm:grid-cols-4 lg:grid-cols-1 dark:border-zinc-800 dark:bg-zinc-900"
     >
       {sellerNav.map(({ to, label }) => (
         <NavLink
           key={to}
           to={to}
-          end
+          end={to !== '/seller/orders'}
           className={({ isActive }) => [
             'flex min-h-11 flex-1 items-center justify-center whitespace-nowrap rounded-xl px-2 py-2 transition sm:px-4 lg:justify-start',
             'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',

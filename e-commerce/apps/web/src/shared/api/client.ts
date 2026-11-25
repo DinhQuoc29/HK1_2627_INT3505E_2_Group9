@@ -39,6 +39,31 @@ export type SellerProduct = Omit<ProductInput, 'description'> & {
   status: ProductStatus
 }
 export type SellerProductPage = { items: SellerProduct[]; has_more: boolean }
+export type OrderStatus = 'pending_payment' | 'paid' | 'shipping' | 'completed' | 'cancelled'
+export type SellerOrder = {
+  id: string
+  checkout_id: string
+  shop: { id: string; name: string }
+  status: OrderStatus
+  total_amount: number
+  shipping: { name: string; phone: string; address: string }
+  items: {
+    id: string
+    product_id: string
+    product_name: string
+    unit_price: number
+    quantity: number
+    line_total: number
+    has_review: boolean
+  }[]
+  created_at: string
+  paid_at: string | null
+  shipped_at: string | null
+  completed_at: string | null
+  cancelled_at: string | null
+  cancelled_by: 'buyer' | 'seller' | null
+}
+export type SellerOrderPage = { items: SellerOrder[]; next_cursor: string | null }
 export type Role = User['role']
 export type AdminUser = { id: string; email: string; full_name: string; role: Role; status: 'active' | 'suspended'; created_at: string; has_shop: boolean }
 export type AdminUserPage = { items: AdminUser[]; next_cursor: string | null }
@@ -161,6 +186,15 @@ export const api = {
   updateSellerProduct: (id: string, product: ProductInput) => authed<SellerProduct>('PUT', `/shops/me/products/${encodeURIComponent(id)}`, product),
   changeSellerProductStatus: (id: string, status: ProductStatus) =>
     authed<SellerProduct>('PATCH', `/shops/me/products/${encodeURIComponent(id)}/status`, { status }),
+  sellerOrders: ({ status, cursor }: { status?: OrderStatus; cursor?: string } = {}) => {
+    const query = new URLSearchParams()
+    if (status) query.set('status', status)
+    if (cursor) query.set('cursor', cursor)
+    return authed<SellerOrderPage>('GET', `/shops/me/orders${query.size ? `?${query}` : ''}`)
+  },
+  sellerOrder: (id: string) => authed<SellerOrder>('GET', `/orders/${encodeURIComponent(id)}`),
+  shipSellerOrder: (id: string) => authed<SellerOrder>('POST', `/orders/${encodeURIComponent(id)}/shipment`),
+  completeSellerOrder: (id: string) => authed<SellerOrder>('POST', `/orders/${encodeURIComponent(id)}/completion`),
   changePassword: (b: { current_password?: string; new_password: string }) => authed<null>('PUT', '/users/me/password', b),
   adminUsers: (query: AdminUserQuery) => {
     const qs = new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)]))
