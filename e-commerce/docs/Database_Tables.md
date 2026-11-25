@@ -24,14 +24,14 @@ Tài khoản người dùng, role và trạng thái khóa đăng nhập. **Mức
 
 #### **user\_identities**
 
-Liên kết tài khoản với nhà cung cấp OAuth (Google). **Mức:** P1. **REQ:** ĐB-OAUTH.
+Liên kết tài khoản với nhà cung cấp OAuth (Google, Facebook). **Mức:** P1. **REQ:** ĐB-OAUTH.
 
 | Cột | Kiểu | Null | Default | Khóa/ràng buộc | Mô tả | REQ |
 | :---- | :---- | :---- | :---- | :---- | :---- | :---- |
 | id | UUID | không |  | PK | UUIDv7 sinh ở app; dùng làm id công khai | ĐB-OAUTH |
 | user\_id | UUID | không |  | FK → users.id (CASCADE) | Tài khoản được liên kết | ĐB-OAUTH |
-| provider | TEXT | không |  | CHECK (provider IN ('google')) | Nhà cung cấp; v1 chỉ có google | ĐB-OAUTH |
-| provider\_subject | VARCHAR(255) | không |  |  | Claim \`sub\` của Google (định danh ổn định, không dùng email) | ĐB-OAUTH |
+| provider | TEXT | không |  | CHECK (provider IN ('google','facebook')) | Nhà cung cấp OAuth: google, facebook (migration 002) | ĐB-OAUTH |
+| provider\_subject | VARCHAR(255) | không |  |  | Google: claim \`sub\`; Facebook: \`id\` của người dùng (định danh ổn định, không dùng email) | ĐB-OAUTH |
 | created\_at | TIMESTAMPTZ | không | now() |  | Thời điểm tạo (UTC) |  |
 
 > * uq\_user\_identities\_provider\_subject UNIQUE (provider, provider\_subject)  

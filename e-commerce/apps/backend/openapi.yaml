@@ -4,11 +4,13 @@ info:
   version: 1.0.0
   description: |
     Accounts (đăng ký, đăng nhập, phiên), Checkout và Orders, Payments (giả lập), Inventory và Reviews.
-    Các endpoint Orders/Payments/Reviews/Inventory mới có đặc tả (design-first), chưa cài đặt.
+    Đã có danh sách đơn của shop, chi tiết đơn và cập nhật giao hàng.
+    Luồng tạo đơn, thanh toán, lịch sử đơn của buyer, hủy đơn, Reviews và API Inventory riêng mới có đặc tả.
 
     **Quy ước.** Path chữ thường, kebab-case, danh từ số nhiều; query snake_case. Tiền là số nguyên VND.
     Danh sách phân trang cursor `?limit=&cursor=` trả `{items, next_cursor}`. Chuyển trạng thái đơn mô hình hóa
     như tài nguyên con (`/orders/{id}/cancellation`, `/shipment`, `/completion`).
+    Sản phẩm của gian hàng dùng `?page=&limit=` và trả `{items, has_more}`.
 
     **Xác thực.** Access token là JWT (HS256, 15 phút) gửi qua `Authorization: Bearer`. Claim `sid` trỏ tới
     `auth_sessions`; mỗi request được bảo vệ đều kiểm tra phiên còn hiệu lực nên logout có hiệu lực ngay.
@@ -21,6 +23,10 @@ servers:
 tags:
   - name: users
   - name: auth
+  - name: shops
+  - name: catalog
+  - name: admin
+  - name: sellers
   - name: checkouts
   - name: orders
   - name: payments
@@ -52,6 +58,13 @@ paths:
                 detail: Email này đã được đăng ký.
                 instance: /api/v1/users
         '422': { $ref: '#/components/responses/ValidationProblem' }
+        '429':
+          description: Thao tác quá nhanh (`rate-limited`)
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
   /api/v1/users/me:
     get:
       tags: [users]
@@ -64,6 +77,68 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/User' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/users/me/identities:
+    post:
+      tags: [users]
+      summary: Liên kết tài khoản Google hoặc Facebook với người dùng đang đăng nhập
+      description: |
+        Mỗi người dùng liên kết tối đa một tài khoản cho mỗi nhà cung cấp, và mỗi tài khoản bên thứ ba chỉ thuộc một người dùng.
+        Nhà cung cấp không phản hồi trả 503 và không thay đổi gì. `credential` là ID token (Google) hoặc access token (Facebook).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, credential]
+              properties:
+                provider: { type: string, enum: [google, facebook] }
+                credential: { type: string, description: 'Google: ID token; Facebook: access token' }
+      responses:
+        '201':
+          description: Hồ sơ sau khi liên kết
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: '`provider-already-linked` (bạn đã liên kết nhà cung cấp này) hoặc `google-account-in-use` / `facebook-account-in-use` (tài khoản đó thuộc người khác)'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+        '503':
+          description: Không kết nối được Google (có thể thử lại)
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /api/v1/users/me/identities/{provider}:
+    delete:
+      tags: [users]
+      summary: Hủy liên kết một nhà cung cấp đăng nhập
+      description: Không cho hủy khi đó là cách đăng nhập duy nhất (không có mật khẩu và không còn nhà cung cấp nào khác) để không bị khóa khỏi tài khoản.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string, enum: [google, facebook] }
+      responses:
+        '204': { description: Đã hủy liên kết }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: Chưa liên kết nhà cung cấp này (`identity-not-found`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409':
+          description: Đây là cách đăng nhập duy nhất (`last-login-method`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
   /api/v1/auth/sessions:
     post:
       tags: [auth]
@@ -114,8 +189,60 @@ paths:
       responses:
         '201': { $ref: '#/components/responses/AuthSession' }
         '401': { $ref: '#/components/responses/Problem' }
+        '429':
+          description: Thao tác quá nhanh (`rate-limited`)
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
         '503':
           description: Không kết nối được Google (có thể thử lại)
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /api/v1/auth/sessions/facebook:
+    post:
+      tags: [auth]
+      summary: Đăng nhập hoặc đăng ký bằng Facebook (access token từ Facebook Login)
+      description: |
+        Server xác minh token qua Graph API (`debug_token`: còn hạn và cấp cho đúng app, rồi `/me`).
+        Tra theo (facebook, id); chưa có thì tạo user mới không mật khẩu (cần email từ Facebook).
+        **Không tự gộp** vào tài khoản có sẵn trùng email (409 `account-exists`): người dùng đăng nhập bằng cách khác
+        rồi liên kết Facebook ở `POST /users/me/identities`. Facebook không phản hồi trả 503, không tạo phiên hay tài khoản.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [access_token]
+              properties:
+                access_token: { type: string, description: Access token do Facebook Login cấp }
+      responses:
+        '201': { $ref: '#/components/responses/AuthSession' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '409':
+          description: Email Facebook đã có tài khoản (`account-exists`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422':
+          description: Facebook không cung cấp email nên không tạo được tài khoản (`facebook-email-missing`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '429':
+          description: Thao tác quá nhanh (`rate-limited`)
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '503':
+          description: Không kết nối được Facebook hoặc chưa cấu hình (có thể thử lại)
           headers:
             Retry-After: { schema: { type: integer } }
           content:
@@ -139,6 +266,491 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/AuthSession' }
         '401': { $ref: '#/components/responses/Problem' }
+  /api/v1/users/me/password:
+    put:
+      tags: [users]
+      summary: Đổi mật khẩu (hoặc đặt mật khẩu lần đầu cho tài khoản chỉ đăng nhập social)
+      description: Thành công thì mọi phiên khác của người dùng bị thu hồi; phiên hiện tại giữ nguyên.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePasswordRequest' }
+      responses:
+        '204': { description: Đã đổi mật khẩu }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/admin/users:
+    get:
+      tags: [admin]
+      summary: Danh sách người dùng (admin)
+      description: Mới nhất trước, phân trang cursor. **Vai trò:** admin.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: role, in: query, schema: { type: string, enum: [buyer, seller, admin] } }
+        - { name: status, in: query, schema: { type: string, enum: [active, suspended] } }
+        - { name: q, in: query, description: 'Tìm theo email hoặc họ tên', schema: { type: string, maxLength: 100 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUserPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/admin/users/{user_id}:
+    parameters:
+      - { name: user_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [admin]
+      summary: Chi tiết một người dùng (admin)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUser' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: Không có người dùng (`user-not-found`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+    patch:
+      tags: [admin]
+      summary: Khóa/mở khóa tài khoản hoặc cấp/thu quyền admin
+      description: |
+        `status: suspended` thu hồi mọi phiên của người dùng ngay lập tức. Không áp dụng cho chính mình (409
+        `cannot-modify-self`). Người bán (đang có shop) không đổi vai trò được (409 `seller-has-shop`); chỉ khóa được.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminUpdateUserRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUser' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: Không có người dùng (`user-not-found`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409':
+          description: '`cannot-modify-self` hoặc `seller-has-shop`'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/auth/email-verifications:
+    post:
+      tags: [auth]
+      summary: Gửi lại email xác minh (người đang đăng nhập)
+      description: Email chứa liên kết có hiệu lực vài giờ. Hai lần gửi cách nhau tối thiểu vài chục giây (429).
+      security: [{ bearerAuth: [] }]
+      responses:
+        '202': { description: Đã xếp hàng gửi email }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Email đã được xác minh (`email-already-verified`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '429':
+          description: Gửi quá nhanh (`rate-limited`)
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /api/v1/auth/email-verifications/confirmation:
+    post:
+      tags: [auth]
+      summary: Xác minh email bằng token trong liên kết
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TokenRequest' }
+      responses:
+        '204': { description: Đã xác minh }
+        '400':
+          description: Token sai, đã dùng hoặc hết hạn (`invalid-email-token`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+        '429':
+          description: Thao tác quá nhanh (`rate-limited`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /api/v1/auth/password-resets:
+    post:
+      tags: [auth]
+      summary: Yêu cầu đặt lại mật khẩu (gửi email)
+      description: Luôn trả 202 dù email có tồn tại hay không, để không lộ danh sách tài khoản.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ForgotPasswordRequest' }
+      responses:
+        '202': { description: Nếu email tồn tại thì liên kết đặt lại đã được gửi }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+        '429':
+          description: Thao tác quá nhanh (`rate-limited`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /api/v1/auth/password-resets/confirmation:
+    post:
+      tags: [auth]
+      summary: Đặt mật khẩu mới bằng token trong email
+      description: Token dùng một lần. Thành công thì mọi phiên của người dùng bị thu hồi và email được coi là đã xác minh.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResetPasswordRequest' }
+      responses:
+        '204': { description: Đã đổi mật khẩu }
+        '400':
+          description: Token sai, đã dùng hoặc hết hạn (`invalid-reset-token`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+        '429':
+          description: Thao tác quá nhanh (`rate-limited`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /api/v1/seller-applications:
+    post:
+      tags: [sellers]
+      summary: Nộp hồ sơ đăng ký người bán
+      description: |
+        Buyer đã xác minh email nộp tên shop và tỉnh/thành; admin duyệt thì mới thành seller. Mỗi người chỉ có một
+        hồ sơ đang chờ (409 `application-pending`). **Vai trò:** buyer.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateShopRequest' }
+      responses:
+        '201':
+          description: Đã nộp hồ sơ và lên lịch gửi email xác nhận cho người nộp
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerApplication' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Admin, hoặc chưa xác minh email (`email-not-verified`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409':
+          description: Đã có shop (`shop-already-exists`) hoặc đã có hồ sơ chờ duyệt (`application-pending`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/seller-applications/me:
+    get:
+      tags: [sellers]
+      summary: Hồ sơ người bán gần nhất của tôi
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerApplication' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: Chưa nộp hồ sơ (`application-not-found`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /api/v1/admin/seller-applications:
+    get:
+      tags: [sellers]
+      summary: Danh sách hồ sơ người bán (admin)
+      description: Mới nhất trước, phân trang cursor. **Vai trò:** admin.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, approved, rejected] } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminSellerApplicationPage' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/admin/seller-applications/{application_id}/approval:
+    post:
+      tags: [sellers]
+      summary: Duyệt hồ sơ (tạo shop và nâng người nộp lên seller)
+      description: Gửi email thông báo cho người nộp. **Vai trò:** admin.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: application_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminSellerApplication' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: Không có hồ sơ (`application-not-found`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409':
+          description: Đã xử lý (`application-not-pending`) hoặc người nộp không còn đủ điều kiện (`applicant-not-eligible`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /api/v1/admin/seller-applications/{application_id}/rejection:
+    post:
+      tags: [sellers]
+      summary: Từ chối hồ sơ kèm lý do
+      description: Gửi email lý do cho người nộp; họ có thể nộp lại. **Vai trò:** admin.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: application_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RejectApplicationRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminSellerApplication' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: Không có hồ sơ (`application-not-found`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409':
+          description: Đã xử lý (`application-not-pending`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/provinces:
+    get:
+      tags: [shops]
+      summary: Danh sách tỉnh/thành (dùng cho form đăng ký người bán)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Province' }
+  /api/v1/shops/me:
+    get:
+      tags: [shops]
+      summary: Shop của seller đang đăng nhập
+      description: '**Vai trò:** seller.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Shop' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: Chưa có shop (`shop-not-found`)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+    put:
+      tags: [shops]
+      summary: Cập nhật tên và tỉnh/thành của shop
+      description: Chỉ chủ shop được cập nhật thông tin gian hàng của mình.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateShopRequest' }
+      responses:
+        '200':
+          description: Thông tin shop sau khi lưu
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Shop' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/shops/me/statistics:
+    get:
+      tags: [shops]
+      summary: Thống kê đơn hàng và thanh toán của shop
+      description: |
+        Thống kê toàn thời gian. Doanh thu là tổng phân bổ đã thu từ các thanh toán mô phỏng thành công
+        của đơn paid, shipping hoặc completed. Đơn hủy và khoản đã hoàn không được tính vào doanh thu.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Thống kê shop
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ShopStatistics' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/shops/me/product-categories:
+    get:
+      tags: [catalog]
+      summary: Danh mục cấp 2 được chọn khi đăng sản phẩm
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ProductCategoryOption' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/shops/me/products:
+    get:
+      tags: [catalog]
+      summary: Danh sách sản phẩm của người bán
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: q, in: query, description: Tìm theo tên không phân biệt dấu, schema: { type: string, maxLength: 255 } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/SellerProductStatus' } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, maximum: 100000, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 12 } }
+      responses:
+        '200':
+          description: Sản phẩm thuộc đúng gian hàng đang đăng nhập
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, has_more]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/SellerProduct' }
+                  has_more: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+    post:
+      tags: [catalog]
+      summary: Đăng sản phẩm cùng ảnh và tồn kho
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SellerProductInput' }
+      responses:
+        '201':
+          description: Sản phẩm đã được tạo ở trạng thái active
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerProduct' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/shops/me/products/{product_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    put:
+      tags: [catalog]
+      summary: Sửa thông tin, ảnh và tồn kho của sản phẩm trong gian hàng
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SellerProductInput' }
+      responses:
+        '200':
+          description: Đã lưu sản phẩm
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerProduct' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
+  /api/v1/shops/me/products/{product_id}/status:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    patch:
+      tags: [catalog]
+      summary: Ẩn hoặc hiển thị lại sản phẩm
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              additionalProperties: false
+              properties:
+                status: { $ref: '#/components/schemas/SellerProductStatus' }
+      responses:
+        '200':
+          description: Trạng thái mới của sản phẩm
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerProduct' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
   /api/v1/checkouts:
     post:
       tags: [checkouts]
@@ -309,6 +921,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
   /api/v1/orders/{order_id}/cancellation:
     post:
       tags: [orders]
@@ -348,6 +961,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/InvalidTransition' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
   /api/v1/orders/{order_id}/completion:
     post:
       tags: [orders]
@@ -366,6 +980,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/InvalidTransition' }
+        '422': { $ref: '#/components/responses/ValidationProblem' }
   /api/v1/shops/me/orders:
     get:
       tags: [orders]
@@ -384,6 +999,8 @@ paths:
               schema: { $ref: '#/components/schemas/OrderPage' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/ValidationProblem' }
   /api/v1/products/{product_id}/inventory:
     get:
@@ -653,6 +1270,67 @@ components:
             detail: Đơn đang ở trạng thái cancelled nên không thể hủy.
             instance: /api/v1/orders/0190a1b2-0000-7000-8000-00000000c003/cancellation
   schemas:
+    ShopStatistics:
+      type: object
+      required: [total_orders, orders_by_status, captured_orders, recorded_revenue_vnd]
+      properties:
+        total_orders: { type: integer, format: int64, minimum: 0 }
+        orders_by_status:
+          type: object
+          required: [pending_payment, paid, shipping, completed, cancelled]
+          additionalProperties: false
+          properties:
+            pending_payment: { type: integer, format: int64, minimum: 0 }
+            paid: { type: integer, format: int64, minimum: 0 }
+            shipping: { type: integer, format: int64, minimum: 0 }
+            completed: { type: integer, format: int64, minimum: 0 }
+            cancelled: { type: integer, format: int64, minimum: 0 }
+        captured_orders: { type: integer, format: int64, minimum: 0 }
+        recorded_revenue_vnd:
+          type: string
+          pattern: '^[0-9]+$'
+          description: Tổng doanh thu ghi nhận bằng VND, dạng chuỗi để giữ chính xác số nguyên lớn.
+    ProductCategoryOption:
+      type: object
+      required: [id, name, parent_name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        parent_name: { type: string }
+    SellerProductStatus: { type: string, enum: [active, inactive] }
+    SellerProductInput:
+      type: object
+      additionalProperties: false
+      required: [name, description, category_id, price, quantity, images]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        brand: { type: string, nullable: true, maxLength: 100 }
+        description: { type: string, minLength: 1, maxLength: 5000 }
+        category_id: { type: string, format: uuid }
+        price: { type: integer, format: int64, minimum: 1, maximum: 9007199254740991 }
+        quantity: { type: integer, format: int32, minimum: 0, maximum: 2147483647 }
+        images:
+          type: array
+          minItems: 1
+          maxItems: 8
+          description: URL HTTP hoặc HTTPS theo thứ tự, ảnh đầu tiên là ảnh đại diện
+          items: { type: string, format: uri, maxLength: 500 }
+    SellerProduct:
+      type: object
+      required: [id, name, brand, description, category_id, category_name, price, quantity, images, status]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        brand: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        category_id: { type: string, format: uuid }
+        category_name: { type: string }
+        price: { type: integer, format: int64 }
+        quantity: { type: integer, format: int32 }
+        images:
+          type: array
+          items: { type: string }
+        status: { $ref: '#/components/schemas/SellerProductStatus' }
     RegisterRequest:
       type: object
       required: [email, password, full_name]
@@ -673,6 +1351,112 @@ components:
         email: { type: string, format: email }
         full_name: { type: string }
         role: { type: string, enum: [buyer, seller, admin] }
+        created_at: { type: string, format: date-time }
+        providers:
+          type: array
+          items: { type: string, enum: [google, facebook] }
+          description: Nhà cung cấp OAuth đã liên kết (trường tính toán từ user_identities)
+        has_password: { type: boolean, description: 'false nếu tài khoản chỉ đăng nhập bằng Google/Facebook (trường tính toán)' }
+        email_verified: { type: boolean, description: 'Email đã xác minh (cần để đăng ký bán hàng)' }
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [new_password]
+      properties:
+        current_password: { type: string, nullable: true, description: 'Bắt buộc nếu tài khoản đã có mật khẩu' }
+        new_password: { type: string, minLength: 8, description: 'Cần có cả chữ và số, tối đa 72 byte' }
+    AdminUser:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        full_name: { type: string }
+        role: { type: string, enum: [buyer, seller, admin] }
+        status: { type: string, enum: [active, suspended] }
+        created_at: { type: string, format: date-time }
+        has_shop: { type: boolean }
+    AdminUserPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AdminUser' }
+        next_cursor: { type: string, nullable: true }
+    AdminUpdateUserRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        role: { type: string, enum: [buyer, admin], description: 'seller chỉ có được bằng cách mở shop' }
+        status: { type: string, enum: [active, suspended] }
+    TokenRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token: { type: string, minLength: 20, maxLength: 200 }
+    ForgotPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+    ResetPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [token, new_password]
+      properties:
+        token: { type: string, minLength: 20, maxLength: 200 }
+        new_password: { type: string, minLength: 8, description: 'Cần có cả chữ và số, tối đa 72 byte' }
+    SellerApplication:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        shop_name: { type: string }
+        province_code: { type: string }
+        province_name: { type: string }
+        status: { type: string, enum: [pending, approved, rejected] }
+        reject_reason: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        reviewed_at: { type: string, format: date-time, nullable: true }
+    AdminSellerApplication:
+      allOf:
+        - $ref: '#/components/schemas/SellerApplication'
+        - type: object
+          properties:
+            applicant_id: { type: string, format: uuid }
+            applicant_email: { type: string, format: email }
+            applicant_name: { type: string }
+    AdminSellerApplicationPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AdminSellerApplication' }
+        next_cursor: { type: string, nullable: true }
+    RejectApplicationRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 500 }
+    Province:
+      type: object
+      properties:
+        code: { type: string, example: HN }
+        name: { type: string, example: Hà Nội }
+    CreateShopRequest:
+      type: object
+      additionalProperties: false
+      required: [name, province_code]
+      properties:
+        name: { type: string, minLength: 3, maxLength: 150 }
+        province_code: { type: string, maxLength: 4, description: Mã tỉnh/thành từ GET /provinces }
+    Shop:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        province: { $ref: '#/components/schemas/Province' }
         created_at: { type: string, format: date-time }
     AuthSession:
       type: object

@@ -15,7 +15,7 @@ PW = "Matkhau123"
 
 @pytest.fixture(scope="module")
 def app():
-    return create_app(login_max_failures=3, google_client_id="test-client")
+    return create_app(login_max_failures=3, google_client_id="test-client", rate_limit_per_minute=0)
 
 
 @pytest.fixture
@@ -49,7 +49,7 @@ def test_register_returns_session_and_hides_secrets(client):
     assert r.status_code == 201
     body = r.json()
     assert body["user"]["email"] == email and body["user"]["role"] == "buyer"
-    assert "password" not in str(body) and "password_hash" not in str(body)
+    assert "password" not in body["user"] and "password_hash" not in str(body)
     cookie = r.headers["set-cookie"].lower()
     assert "refresh_token=" in cookie and "httponly" in cookie and "samesite=lax" in cookie
     assert "path=/api/v1/auth" in cookie
@@ -147,7 +147,7 @@ def test_refresh_rotates_token_and_rejects_reuse(app):
 def test_role_guard_forbids_buyer():
     from accounts.permissions import require_role
 
-    app = create_app()
+    app = create_app(rate_limit_per_minute=0)
 
     @app.get("/_admin-probe")
     def probe(_=Depends(require_role("admin"))):
@@ -201,3 +201,216 @@ def test_google_outage_is_503_and_creates_nothing(client, monkeypatch):
     assert "set-cookie" not in r.headers
     with engine.connect() as c:
         assert c.execute(text("select count(*) from users")).scalar_one() == before
+
+
+def test_me_reports_login_methods(client, monkeypatch):
+    email, reg = _register(client)
+    me = client.get("/api/v1/users/me", headers=_bearer(reg)).json()
+    assert me["has_password"] is True and me["providers"] == []
+    claims = _fake_google(monkeypatch)
+    r = client.post("/api/v1/auth/sessions/google", json={"credential": "x"})
+    me = client.get("/api/v1/users/me", headers=_bearer(r)).json()
+    assert me["has_password"] is False and me["providers"] == ["google"]
+
+
+def test_signed_in_user_can_link_google_and_then_sign_in_with_it(client, monkeypatch):
+    email, reg = _register(client)
+    claims = _fake_google(monkeypatch, email=_email())  # email Google khác email tài khoản
+    r = client.post("/api/v1/users/me/identities", json={"provider": "google", "credential": "x"}, headers=_bearer(reg))
+    assert r.status_code == 201 and r.json()["providers"] == ["google"] and r.json()["email"] == email
+    back = client.post("/api/v1/auth/sessions/google", json={"credential": "x"})
+    assert back.status_code == 201 and back.json()["user"]["id"] == reg.json()["user"]["id"]
+    assert claims["email"] != email
+
+
+def test_link_google_requires_auth(client):
+    r = client.post("/api/v1/users/me/identities", json={"provider": "google", "credential": "x"})
+    assert r.status_code == 401
+
+
+def test_link_google_conflicts(client, monkeypatch):
+    _, a = _register(client)
+    _, b = _register(client)
+    _fake_google(monkeypatch)
+    body = {"provider": "google", "credential": "x"}
+    assert client.post("/api/v1/users/me/identities", json=body, headers=_bearer(a)).status_code == 201
+    again = client.post("/api/v1/users/me/identities", json=body, headers=_bearer(a))
+    assert again.status_code == 409 and again.json()["type"] == "/problems/provider-already-linked"
+    other = client.post("/api/v1/users/me/identities", json=body, headers=_bearer(b))
+    assert other.status_code == 409 and other.json()["type"] == "/problems/google-account-in-use"
+
+
+def test_link_google_unavailable_changes_nothing(client, monkeypatch):
+    _, reg = _register(client)
+
+    def boom(cred, client_id):
+        raise auth_mod.GoogleUnavailable("down")
+
+    monkeypatch.setattr(auth_mod, "verify_google_id_token", boom)
+    r = client.post("/api/v1/users/me/identities", json={"provider": "google", "credential": "x"}, headers=_bearer(reg))
+    assert r.status_code == 503
+    assert client.get("/api/v1/users/me", headers=_bearer(reg)).json()["providers"] == []
+
+
+def test_unlink_google(client, monkeypatch):
+    _, reg = _register(client)
+    _fake_google(monkeypatch)
+    h = _bearer(reg)
+    client.post("/api/v1/users/me/identities", json={"provider": "google", "credential": "x"}, headers=h)
+    assert client.delete("/api/v1/users/me/identities/google", headers=h).status_code == 204
+    assert client.get("/api/v1/users/me", headers=h).json()["providers"] == []
+    assert client.delete("/api/v1/users/me/identities/google", headers=h).status_code == 404
+
+
+def test_cannot_unlink_the_only_login_method(client, monkeypatch):
+    _fake_google(monkeypatch)
+    r = client.post("/api/v1/auth/sessions/google", json={"credential": "x"})  # tài khoản chỉ-Google
+    d = client.delete("/api/v1/users/me/identities/google", headers=_bearer(r))
+    assert d.status_code == 409 and d.json()["type"] == "/problems/last-login-method"
+    assert client.get("/api/v1/users/me", headers=_bearer(r)).json()["providers"] == ["google"]
+
+
+def test_unknown_provider_is_404(client):
+    _, reg = _register(client)
+    assert client.delete("/api/v1/users/me/identities/facebook", headers=_bearer(reg)).status_code == 404
+
+
+def test_rate_limit_blocks_bursts_on_auth_endpoints():
+    limited = TestClient(create_app(rate_limit_per_minute=3))
+    codes = [limited.post("/api/v1/auth/sessions", json={"email": _email(), "password": "Sai12345"}).status_code for _ in range(5)]
+    assert codes[:3] == [401, 401, 401] and codes[3:] == [429, 429]
+    r = limited.post("/api/v1/auth/sessions", json={"email": _email(), "password": "Sai12345"})
+    assert r.headers["content-type"].startswith("application/problem+json") and int(r.headers["retry-after"]) > 0
+    assert limited.get("/healthz").status_code == 200  # endpoint khác không bị giới hạn
+
+
+# ---------------------------------------------------------------- Facebook
+def _fake_facebook(monkeypatch, **profile):
+    base = {"id": uuid.uuid4().hex, "name": "Fb User", "email": _email()}
+    base.update(profile)
+    monkeypatch.setattr(auth_mod, "verify_facebook_token", lambda token, app_id, secret: base)
+    return base
+
+
+FB = "/api/v1/auth/sessions/facebook"
+
+
+def test_facebook_creates_user_without_password_then_returns_same_account(client, monkeypatch):
+    profile = _fake_facebook(monkeypatch)
+    r1 = client.post(FB, json={"access_token": "x"})
+    r2 = client.post(FB, json={"access_token": "x"})
+    assert r1.status_code == r2.status_code == 201
+    assert r1.json()["user"]["id"] == r2.json()["user"]["id"]
+    assert r1.json()["user"]["providers"] == ["facebook"] and r1.json()["user"]["has_password"] is False
+    assert r1.json()["user"]["email"] == profile["email"]
+    assert "refresh_token=" in r1.headers["set-cookie"]
+
+
+def test_facebook_does_not_auto_merge_into_existing_email_account(client, monkeypatch):
+    email, reg = _register(client)
+    _fake_facebook(monkeypatch, email=email)
+    r = client.post(FB, json={"access_token": "x"})
+    assert r.status_code == 409 and r.json()["type"] == "/problems/account-exists"
+    assert "set-cookie" not in r.headers
+    # sau khi đăng nhập bằng mật khẩu, người dùng tự liên kết được
+    linked = client.post("/api/v1/users/me/identities", json={"provider": "facebook", "credential": "x"}, headers=_bearer(reg))
+    assert linked.status_code == 201 and linked.json()["providers"] == ["facebook"]
+    again = client.post(FB, json={"access_token": "x"})
+    assert again.status_code == 201 and again.json()["user"]["id"] == reg.json()["user"]["id"]
+
+
+def test_facebook_without_email_cannot_create_account(client, monkeypatch):
+    _fake_facebook(monkeypatch, email=None)
+    r = client.post(FB, json={"access_token": "x"})
+    assert r.status_code == 422 and r.json()["type"] == "/problems/facebook-email-missing"
+
+
+def test_facebook_invalid_token_is_401(client, monkeypatch):
+    def bad(token, app_id, secret):
+        raise ValueError("bad")
+    monkeypatch.setattr(auth_mod, "verify_facebook_token", bad)
+    assert client.post(FB, json={"access_token": "x"}).status_code == 401
+
+
+def test_facebook_outage_is_503_and_creates_nothing(client, monkeypatch):
+    def boom(token, app_id, secret):
+        raise auth_mod.FacebookUnavailable("down")
+    monkeypatch.setattr(auth_mod, "verify_facebook_token", boom)
+    with engine.connect() as c:
+        before = c.execute(text("select count(*) from users")).scalar_one()
+    r = client.post(FB, json={"access_token": "x"})
+    assert r.status_code == 503 and "retry-after" in r.headers and "set-cookie" not in r.headers
+    with engine.connect() as c:
+        assert c.execute(text("select count(*) from users")).scalar_one() == before
+
+
+def test_facebook_not_configured_is_503(monkeypatch):
+    c = TestClient(create_app(rate_limit_per_minute=0))  # không đặt FACEBOOK_APP_ID/SECRET
+    monkeypatch.delenv("FACEBOOK_APP_ID", raising=False)
+    r = c.post(FB, json={"access_token": "x"})
+    assert r.status_code == 503 and r.json()["type"] == "/problems/facebook-unavailable"
+
+
+def test_facebook_account_in_use_by_someone_else(client, monkeypatch):
+    _, a = _register(client)
+    _, b = _register(client)
+    _fake_facebook(monkeypatch)
+    body = {"provider": "facebook", "credential": "x"}
+    assert client.post("/api/v1/users/me/identities", json=body, headers=_bearer(a)).status_code == 201
+    other = client.post("/api/v1/users/me/identities", json=body, headers=_bearer(b))
+    assert other.status_code == 409 and other.json()["type"] == "/problems/facebook-account-in-use"
+
+
+def test_can_unlink_one_provider_when_another_remains_even_without_password(client, monkeypatch):
+    _fake_google(monkeypatch)
+    r = client.post("/api/v1/auth/sessions/google", json={"credential": "x"})  # tài khoản chỉ-Google
+    h = _bearer(r)
+    _fake_facebook(monkeypatch)
+    assert client.post("/api/v1/users/me/identities", json={"provider": "facebook", "credential": "x"}, headers=h).status_code == 201
+    assert client.get("/api/v1/users/me", headers=h).json()["providers"] == ["facebook", "google"]
+    assert client.delete("/api/v1/users/me/identities/facebook", headers=h).status_code == 204
+    last = client.delete("/api/v1/users/me/identities/google", headers=h)
+    assert last.status_code == 409 and last.json()["type"] == "/problems/last-login-method"
+
+
+def test_verify_facebook_token_checks_app_id_and_handles_outage(monkeypatch):
+    """Hàm xác minh thật (không mock) với Graph API giả: sai app -> ValueError, 5xx/mạng -> Unavailable."""
+    import requests
+
+    class Resp:
+        def __init__(self, status, body):
+            self.status_code, self._body = status, body
+        def json(self):
+            return self._body
+
+    def make(dbg, me=None, raise_exc=None):
+        def fake_get(url, **kw):
+            if raise_exc:
+                raise raise_exc
+            return dbg if url.endswith("/debug_token") else me
+        return fake_get
+
+    good = Resp(200, {"data": {"is_valid": True, "app_id": "APP", "user_id": "1"}})
+    me = Resp(200, {"id": "1", "name": "A", "email": "a@x.com"})
+    monkeypatch.setattr(requests, "get", make(good, me))
+    assert auth_mod.verify_facebook_token("t", "APP", "SECRET")["id"] == "1"
+
+    monkeypatch.setattr(requests, "get", make(Resp(200, {"data": {"is_valid": True, "app_id": "OTHER", "user_id": "1"}}), me))
+    with pytest.raises(ValueError):
+        auth_mod.verify_facebook_token("t", "APP", "SECRET")  # token của app khác
+
+    monkeypatch.setattr(requests, "get", make(Resp(200, {"data": {"is_valid": False}}), me))
+    with pytest.raises(ValueError):
+        auth_mod.verify_facebook_token("t", "APP", "SECRET")
+
+    monkeypatch.setattr(requests, "get", make(Resp(503, {})))
+    with pytest.raises(auth_mod.FacebookUnavailable):
+        auth_mod.verify_facebook_token("t", "APP", "SECRET")
+
+    monkeypatch.setattr(requests, "get", make(None, raise_exc=requests.ConnectionError("net")))
+    with pytest.raises(auth_mod.FacebookUnavailable):
+        auth_mod.verify_facebook_token("t", "APP", "SECRET")
+
+    with pytest.raises(auth_mod.FacebookUnavailable):
+        auth_mod.verify_facebook_token("t", "", "")  # chưa cấu hình
+

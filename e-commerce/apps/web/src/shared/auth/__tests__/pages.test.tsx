@@ -6,7 +6,7 @@ import { GuestOnly, ProtectedRoute } from '../ProtectedRoute'
 import LoginPage from '../pages/LoginPage'
 import RegisterPage from '../pages/RegisterPage'
 
-const user = { id: 'u1', email: 'an@example.com', full_name: 'Nguyễn Văn An', role: 'buyer', created_at: '2026-01-01T00:00:00Z' }
+const user = { id: 'u1', email: 'an@example.com', full_name: 'Nguyễn Văn An', role: 'buyer', created_at: '2026-01-01T00:00:00Z', providers: [] as string[], has_password: true }
 const problem = (status: number, type: string, detail: string, extra: object = {}) =>
   new Response(JSON.stringify({ type: `/problems/${type}`, title: 't', status, detail, ...extra }), { status, headers: { 'Content-Type': 'application/problem+json' } })
 const ok = (status = 201) => new Response(JSON.stringify({ access_token: 'tok', token_type: 'Bearer', expires_in: 900, user }), { status })

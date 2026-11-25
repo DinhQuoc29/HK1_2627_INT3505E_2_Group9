@@ -32,7 +32,7 @@ export function Button({ loading, children, ...p }: { loading?: boolean } & Reac
   )
 }
 
-export function Alert({ children, tone = 'error' }: { children: ReactNode; tone?: 'error' | 'info' }) {
+export function Alert({ children, tone = 'error' }: { children: ReactNode; tone?: 'error' | 'info' | 'success' }) {
   return (
     <div
       role={tone === 'error' ? 'alert' : 'status'}
@@ -40,7 +40,9 @@ export function Alert({ children, tone = 'error' }: { children: ReactNode; tone?
         'flex gap-3 rounded-xl border px-4 py-3 text-sm',
         tone === 'error'
           ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200'
-          : 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300',
+          : tone === 'success'
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200'
+            : 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300',
       )}
     >
       <svg className="mt-0.5 size-4 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
@@ -74,6 +76,22 @@ export const TextField = forwardRef<HTMLInputElement, FieldProps>(function TextF
       ) : hint ? (
         <p id={`${id}-hint`} className="mt-1.5 text-xs text-zinc-500">{hint}</p>
       ) : null}
+    </div>
+  )
+})
+
+type SelectProps = { label: string; error?: string; options: { value: string; label: string }[]; placeholder?: string } & React.SelectHTMLAttributes<HTMLSelectElement>
+
+export const SelectField = forwardRef<HTMLSelectElement, SelectProps>(function SelectField({ label, error, options, placeholder, className, ...p }, ref) {
+  const id = useId()
+  return (
+    <div className={className}>
+      <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">{label}</label>
+      <select id={id} ref={ref} aria-invalid={!!error} aria-describedby={error ? `${id}-err` : undefined} className={inputClass(!!error)} {...p}>
+        <option value="">{placeholder ?? 'Chọn…'}</option>
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+      {error && <p id={`${id}-err`} className="mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p>}
     </div>
   )
 })
