@@ -59,6 +59,9 @@ def create_app(**overrides) -> FastAPI:
     from orders.routes import router as orders_router
 
     app.include_router(orders_router)
+    from cart.routes import router as cart_router
+
+    app.include_router(cart_router)
 
     @app.get("/healthz", include_in_schema=False)
     def healthz():

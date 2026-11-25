@@ -27,7 +27,7 @@ function setup(opts: { restore: Role | null; login?: Role | Response; route: (c:
     if (call.path === '/auth/sessions/current') return json(null, 204)
     return opts.route(call) ?? json(null, 500)
   }))
-  render(<MemoryRouter initialEntries={[opts.initial ?? '/']}><AppRoutes /></MemoryRouter>)
+  render(<MemoryRouter initialEntries={[opts.initial ?? '/login']}><AppRoutes /></MemoryRouter>)
   return calls
 }
 
@@ -40,10 +40,10 @@ async function signIn() {
 afterEach(() => { vi.unstubAllGlobals(); setAccessToken(null) })
 
 describe('điều hướng theo vai trò sau đăng nhập', () => {
-  it('buyer vào /account', async () => {
+  it('buyer vào trang mua sắm', async () => {
     setup({ restore: null, login: 'buyer', route: () => undefined })
     await signIn()
-    expect(await screen.findByRole('heading', { name: /Xin chào, Tên buyer/ })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Món bạn cần/ })).toBeInTheDocument()
   })
 
   it('seller vào /seller', async () => {

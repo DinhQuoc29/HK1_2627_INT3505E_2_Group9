@@ -1,5 +1,4 @@
 """Quản lý sản phẩm thuộc gian hàng của người bán."""
-import unicodedata
 import uuid
 
 from sqlalchemy import func, select
@@ -8,17 +7,11 @@ from sqlalchemy.orm import Session, selectinload
 from catalog import categories, inventory
 from catalog.model import Category, Product, ProductImage, ProductStatus
 from catalog.schema import ProductInput, ProductState, SellerProductOut, SellerProductPage
+from catalog.text import normalize_name
 from common.errors import ProblemError
 from db import new_id
 from orders.model import Inventory
 from time_utils import utcnow
-
-
-def _normalize(text: str) -> str:
-    return "".join(
-        char for char in unicodedata.normalize("NFD", text.lower().replace("đ", "d"))
-        if unicodedata.category(char) != "Mn"
-    )
 
 
 def _out(product: Product, category_name: str, quantity: int) -> SellerProductOut:
@@ -40,7 +33,7 @@ def list_products(s: Session, shop_id: uuid.UUID, *, q: str, status: ProductStat
         .offset((page - 1) * limit).limit(limit + 1)
     )
     if q.strip():
-        stmt = stmt.where(Product.name_normalized.contains(_normalize(q.strip()), autoescape=True))
+        stmt = stmt.where(Product.name_normalized.contains(normalize_name(q.strip()), autoescape=True))
     if status is not None:
         stmt = stmt.where(Product.status == status)
     rows = s.execute(stmt).all()
@@ -63,7 +56,7 @@ def _owned_product(s: Session, shop_id: uuid.UUID, product_id: uuid.UUID) -> Pro
 def _save(s: Session, product: Product, body: ProductInput) -> SellerProductOut:
     category = categories.require_product_category(s, body.category_id)
     product.name = body.name
-    product.name_normalized = _normalize(body.name)[:255]
+    product.name_normalized = normalize_name(body.name)[:255]
     product.brand = body.brand or None
     product.description = body.description
     product.category_id = category.id

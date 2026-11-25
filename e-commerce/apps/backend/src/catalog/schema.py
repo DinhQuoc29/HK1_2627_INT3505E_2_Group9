@@ -115,3 +115,47 @@ class SellerProductOut(BaseModel):
 class SellerProductPage(BaseModel):
     items: list[SellerProductOut]
     has_more: bool
+
+
+class CatalogCategory(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    slug: str
+
+
+class CatalogCategoryGroup(CatalogCategory):
+    children: list[CatalogCategory]
+
+
+class CatalogShop(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    province: ProvinceOut
+
+
+class CatalogProduct(BaseModel):
+    id: uuid.UUID
+    name: str
+    brand: str | None
+    price: int
+    in_stock: bool
+    shop: CatalogShop
+
+
+class CatalogProductCard(CatalogProduct):
+    image_url: str | None
+
+
+class CatalogProductPage(BaseModel):
+    items: list[CatalogProductCard]
+    has_more: bool
+
+
+class CatalogProductDetail(CatalogProduct):
+    description: str | None
+    images: list[str]
+    category: CatalogCategory
+    parent_category: CatalogCategory | None

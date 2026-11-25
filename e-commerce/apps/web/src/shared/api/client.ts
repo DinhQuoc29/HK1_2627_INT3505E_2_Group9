@@ -45,6 +45,41 @@ export type SellerProduct = Omit<ProductInput, 'description'> & {
   status: ProductStatus
 }
 export type SellerProductPage = { items: SellerProduct[]; has_more: boolean }
+
+export type CatalogCategory = { name: string; slug: string }
+export type CatalogCategoryGroup = CatalogCategory & { children: CatalogCategory[] }
+export type CatalogProduct = {
+  id: string
+  name: string
+  brand: string | null
+  price: number
+  in_stock: boolean
+  shop: Pick<Shop, 'id' | 'name' | 'province'>
+}
+export type CatalogProductCard = CatalogProduct & { image_url: string | null }
+export type CatalogProductPage = { items: CatalogProductCard[]; has_more: boolean }
+export type CatalogProductDetail = CatalogProduct & {
+  description: string | null
+  images: string[]
+  category: CatalogCategory
+  parent_category: CatalogCategory | null
+}
+
+export type CartLine = {
+  product_id: string
+  name: string
+  image_url: string | null
+  quantity: number
+  is_active: boolean
+  available_quantity: number
+  price_changed: boolean
+  unit_price_vnd: string
+  line_total_vnd: string
+}
+export type Cart = {
+  groups: { shop: CatalogProduct['shop']; items: CartLine[]; subtotal_vnd: string }[]
+  subtotal_vnd: string
+}
 export type OrderStatus = 'pending_payment' | 'paid' | 'shipping' | 'completed' | 'cancelled'
 export type SellerOrder = {
   id: string
@@ -168,6 +203,15 @@ export const api = {
   me: () => authed<User>('GET', '/users/me'),
   linkIdentity: (provider: Provider, credential: string) => authed<User>('POST', '/users/me/identities', { provider, credential }),
   provinces: () => request<Province[]>('GET', '/provinces'),
+  catalogCategories: () => request<CatalogCategoryGroup[]>('GET', '/categories'),
+  catalogProducts: (query: URLSearchParams) =>
+    request<CatalogProductPage>('GET', `/products${query.size ? `?${query}` : ''}`),
+  catalogProduct: (id: string) => request<CatalogProductDetail>('GET', `/products/${encodeURIComponent(id)}`),
+  cart: () => authed<Cart>('GET', '/cart'),
+  addCartItem: (product_id: string, quantity: number) => authed<Cart>('POST', '/cart/items', { product_id, quantity }),
+  changeCartItem: (id: string, quantity: number) =>
+    authed<Cart>('PATCH', `/cart/items/${encodeURIComponent(id)}`, { quantity }),
+  removeCartItem: (id: string) => authed<Cart>('DELETE', `/cart/items/${encodeURIComponent(id)}`),
   applySeller: (b: { name: string; province_code: string }) => authed<SellerApplication>('POST', '/seller-applications', b),
   myApplication: () => authed<SellerApplication>('GET', '/seller-applications/me'),
   adminApplications: (query: { status?: ApplicationStatus | ''; cursor?: string; limit?: number }) => {
