@@ -126,7 +126,8 @@ describe('phân quyền route', () => {
     expect(dashboardNav.getByRole('link', { name: 'Tổng quan' })).toHaveAttribute('aria-current', 'page')
 
     await userEvent.click(dashboardNav.getByRole('link', { name: 'Tài khoản' }))
-    expect(await screen.findByRole('heading', { name: 'Xin chào, Tên seller' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Tài khoản' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Tên seller' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Đăng xuất' }))
     expect(await screen.findByRole('button', { name: 'Đăng nhập' })).toBeInTheDocument()
   })

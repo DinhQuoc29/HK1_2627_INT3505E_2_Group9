@@ -1,7 +1,7 @@
 import type { Order } from '../api/client'
 import { orderDate, orderMoney, orderPanel } from './orderUi'
 
-export function OrderDetails({ order }: { order: Order }) {
+export function OrderDetails({ order, panelClassName = orderPanel }: { order: Order; panelClassName?: string }) {
   const milestones = [
     { label: 'Đặt đơn', at: order.created_at },
     { label: 'Thanh toán', at: order.paid_at },
@@ -12,7 +12,7 @@ export function OrderDetails({ order }: { order: Order }) {
 
   return (
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-      <section className={orderPanel} aria-labelledby="order-items">
+      <section className={panelClassName} aria-labelledby="order-items">
         <h2 id="order-items" className="text-lg font-semibold">Sản phẩm trong đơn</h2>
         <ul className="mt-2 divide-y divide-zinc-200 dark:divide-zinc-800">
           {order.items.map((item) => (
@@ -31,7 +31,7 @@ export function OrderDetails({ order }: { order: Order }) {
         </div>
       </section>
       <div className="min-w-0 space-y-4">
-        <section className={orderPanel} aria-labelledby="order-recipient">
+        <section className={panelClassName} aria-labelledby="order-recipient">
           <h2 id="order-recipient" className="text-lg font-semibold">Thông tin nhận hàng</h2>
           <dl className="mt-3 space-y-3 text-sm wrap-anywhere">
             <div><dt className="text-zinc-600 dark:text-zinc-400">Người nhận</dt><dd className="mt-0.5 font-medium">{order.shipping.name}</dd></div>
@@ -39,7 +39,7 @@ export function OrderDetails({ order }: { order: Order }) {
             <div><dt className="text-zinc-600 dark:text-zinc-400">Địa chỉ</dt><dd className="mt-0.5 font-medium whitespace-pre-wrap">{order.shipping.address}</dd></div>
           </dl>
         </section>
-        <section className={orderPanel} aria-labelledby="order-timeline">
+        <section className={panelClassName} aria-labelledby="order-timeline">
           <h2 id="order-timeline" className="text-lg font-semibold">Tiến trình đơn hàng</h2>
           <ol className="mt-4 space-y-3 border-l border-zinc-200 pl-4 text-sm dark:border-zinc-700">
             {milestones.map(({ label, at }) => at && (

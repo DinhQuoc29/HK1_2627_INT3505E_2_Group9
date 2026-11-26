@@ -3,11 +3,15 @@ import { Link } from 'react-router-dom'
 import { api, type ShopStatistics } from '../../shared/api/client'
 import { Alert, Spinner } from '../../shared/auth/components/ui'
 import { describeError } from '../../shared/auth/errors'
-import { orderMoney, orderPanel, orderSecondary, orderStatusOptions } from '../../shared/orders/orderUi'
+import { orderMoney, orderSecondary, orderStatusOptions } from '../../shared/orders/orderUi'
+import { SellerIcon, sellerCard, sellerTextLink } from '../sellerUi'
 
 const count = new Intl.NumberFormat('vi-VN')
+const metricLabel = 'text-[13px] font-semibold tracking-wide text-slate-600 uppercase dark:text-slate-300'
+const metricPeriod = 'shrink-0 rounded-md border border-slate-200/60 bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+const metricValue = 'text-3xl font-bold leading-tight tracking-tight tabular-nums wrap-anywhere sm:text-[32px]'
 
-export function ShopStatsPanel() {
+export function ShopStatsPanel({ onLoaded }: { onLoaded: (updatedAt: Date) => void }) {
   const [stats, setStats] = useState<ShopStatistics>()
   const [error, setError] = useState<string>()
   const [attempt, setAttempt] = useState(0)
@@ -15,61 +19,87 @@ export function ShopStatsPanel() {
   useEffect(() => {
     let cancelled = false
     api.shopStatistics().then(
-      (result) => { if (!cancelled) setStats(result) },
+      (result) => {
+        if (cancelled) return
+        setStats(result)
+        onLoaded(new Date())
+      },
       (failure) => { if (!cancelled) setError(describeError(failure).message ?? 'Không tải được thống kê gian hàng.') },
     )
     return () => { cancelled = true }
-  }, [attempt])
+  }, [attempt, onLoaded])
 
   return (
-    <section aria-labelledby="shop-statistics" className={orderPanel}>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 id="shop-statistics" className="text-lg font-semibold">Thống kê gian hàng</h2>
-          <p className="mt-0.5 text-sm text-zinc-600 dark:text-zinc-400">Toàn thời gian</p>
-        </div>
-        <Link to="/seller/orders" className={orderSecondary}>Xem tất cả đơn</Link>
-      </div>
-      {error ? (
-        <div className="space-y-3">
-          <Alert>{error}</Alert>
-          <button type="button" className={orderSecondary} onClick={() => { setError(undefined); setAttempt((value) => value + 1) }}>
-            Tải lại thống kê
-          </button>
-        </div>
-      ) : stats ? (
-        <div className="space-y-4">
-          <dl className="grid gap-3 sm:grid-cols-2">
-            <div className="min-w-0 rounded-xl bg-zinc-50 p-4 dark:bg-zinc-800/60">
-              <dt className="text-sm text-zinc-600 dark:text-zinc-400">Tổng số đơn</dt>
-              <dd className="mt-1 text-2xl font-semibold tabular-nums">{count.format(stats.total_orders)}</dd>
+    <>
+      {stats && (
+        <div className="grid gap-4 md:grid-cols-2">
+          <section className={`${sellerCard} flex flex-col gap-3`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className={metricLabel}>Tổng số đơn</h2>
+              <span className={metricPeriod}>Toàn thời gian</span>
             </div>
-            <div className="min-w-0 rounded-xl bg-brand-50 p-4 dark:bg-brand-900/25">
-              <dt className="text-sm font-medium text-brand-900 dark:text-brand-100">Doanh thu ghi nhận</dt>
-              <dd className="mt-1 text-2xl font-semibold tabular-nums wrap-anywhere">{orderMoney.format(BigInt(stats.recorded_revenue_vnd))}</dd>
-              <dd className="mt-1 text-xs leading-relaxed text-zinc-700 dark:text-zinc-300">
-                {stats.captured_orders
-                  ? `Thanh toán mô phỏng của ${count.format(stats.captured_orders)} đơn, đã loại trừ khoản hoàn.`
-                  : 'Chưa có khoản thanh toán mô phỏng được ghi nhận.'}
-              </dd>
+            <div className="flex flex-wrap items-baseline gap-x-2">
+              <span className={metricValue}>{count.format(stats.total_orders)}</span>
+              <span className="text-sm text-slate-500 dark:text-slate-400">đơn hàng</span>
             </div>
-          </dl>
-          <ul aria-label="Số đơn theo trạng thái" className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
-            {orderStatusOptions.map(([status, { label }]) => (
-              <li key={status} className="min-w-0">
-                <Link
-                  to={`/seller/orders?status=${status}`}
-                  aria-label={`${label}: ${count.format(stats.orders_by_status[status])} đơn`}
-                  className="block h-full rounded-xl border border-zinc-200 p-3 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                >
-                  <span className="block text-xs text-zinc-600 dark:text-zinc-400">{label}</span>
-                  <span className="mt-1 block text-lg font-semibold tabular-nums">{count.format(stats.orders_by_status[status])}</span>
-                </Link>
-              </li>
-            ))}
+            <div className="mt-auto flex justify-end border-t border-slate-100 pt-2 dark:border-slate-800">
+              <Link to="/seller/orders" className={sellerTextLink}>Chi tiết đơn hàng <SellerIcon name="chevron" className="size-3.5" /></Link>
+            </div>
+          </section>
+
+          <section className={`${sellerCard} flex flex-col gap-3`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className={metricLabel}>Doanh thu ghi nhận</h2>
+              <span className={metricPeriod}>Toàn thời gian</span>
+            </div>
+            <p className={metricValue}>{orderMoney.format(BigInt(stats.recorded_revenue_vnd))}</p>
+            <p className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5 text-xs leading-relaxed text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+              <SellerIcon name="info" className="mt-0.5 size-4 text-slate-400" />
+              <span>{stats.captured_orders
+                ? `Thanh toán mô phỏng của ${count.format(stats.captured_orders)} đơn, đã loại trừ khoản hoàn.`
+                : 'Chưa có khoản thanh toán mô phỏng được ghi nhận.'}</span>
+            </p>
+          </section>
+        </div>
+      )}
+
+      <section aria-labelledby="shop-statistics" className={sellerCard}>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-slate-100 pb-2 dark:border-slate-800">
+          <h2 id="shop-statistics" className="text-base font-bold">Thống kê đơn hàng</h2>
+          <Link to="/seller/orders" className={sellerTextLink}>Xem tất cả đơn <SellerIcon name="arrow" className="size-4" /></Link>
+        </div>
+        {stats ? (
+          <ul aria-label="Số đơn theo trạng thái" className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+            {orderStatusOptions.map(([status, { label }]) => {
+              const total = count.format(stats.orders_by_status[status])
+              const needsShipping = status === 'paid' && stats.orders_by_status[status] > 0
+              return (
+                <li key={status} className="min-w-0 last:col-span-2 sm:last:col-span-1">
+                  <Link
+                    to={`/seller/orders?status=${status}`}
+                    aria-label={`${label}: ${total} đơn`}
+                    className={`flex h-full min-h-19 flex-col items-center justify-center gap-1 rounded-lg border p-3 text-center transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--seller-accent) ${
+                      needsShipping
+                        ? 'border-(--seller-status-border) bg-(--seller-status-bg) text-(--seller-accent) hover:bg-(--seller-nav-active)'
+                        : 'border-slate-100 bg-slate-50 text-slate-800 hover:bg-slate-100/70 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="text-xl font-bold leading-tight tabular-nums">{total}</span>
+                    <span className={`text-xs font-medium ${needsShipping ? '' : 'text-slate-500 dark:text-slate-400'}`}>{label}</span>
+                  </Link>
+                </li>
+              )
+            })}
           </ul>
-        </div>
-      ) : <Spinner label="Đang tải thống kê…" />}
-    </section>
+        ) : error ? (
+          <div className="space-y-3">
+            <Alert>{error}</Alert>
+            <button type="button" className={orderSecondary} onClick={() => { setError(undefined); setAttempt((value) => value + 1) }}>
+              Tải lại thống kê
+            </button>
+          </div>
+        ) : <Spinner label="Đang tải thống kê…" />}
+      </section>
+    </>
   )
 }

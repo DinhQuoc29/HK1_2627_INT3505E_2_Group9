@@ -4,8 +4,10 @@ import { ApiError, api, type SellerOrder } from '../../shared/api/client'
 import { Alert, Button, Spinner } from '../../shared/auth/components/ui'
 import { describeError } from '../../shared/auth/errors'
 import { AppShell } from '../../shared/layout/AppShell'
-import { OrderBadge, orderDate, orderPanel, orderSecondary } from '../../shared/orders/orderUi'
+import { OrderBadge, orderDate, orderSecondary } from '../../shared/orders/orderUi'
 import { OrderDetails } from '../../shared/orders/OrderDetails'
+
+const detailPanel = 'min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-xs sm:p-5'
 
 function SellerOrderDetail({ id }: { id: string }) {
   const [order, setOrder] = useState<SellerOrder>()
@@ -62,21 +64,21 @@ function SellerOrderDetail({ id }: { id: string }) {
 
   return (
     <>
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Đơn #{id.slice(0, 8).toUpperCase()}</h1>
+      <h1 className="text-[22px] leading-7 font-semibold tracking-tight">Đơn #{id.slice(0, 8).toUpperCase()}</h1>
       {notice && <Alert tone="success">{notice}</Alert>}
       {actionError && <Alert>{actionError}</Alert>}
-      {loading ? <div className={orderPanel}><Spinner label="Đang tải chi tiết…" /></div> : error ? (
+      {loading ? <div className={detailPanel}><Spinner label="Đang tải chi tiết…" /></div> : error ? (
         <div className="space-y-3">
           <Alert>{error}</Alert>
           <button type="button" className={orderSecondary} onClick={reload}>Thử lại</button>
         </div>
       ) : order && (
         <>
-          <section className={`${orderPanel} space-y-4`} aria-label="Trạng thái và thao tác giao hàng">
+          <section className={`${detailPanel} space-y-4`} aria-label="Trạng thái và thao tác giao hàng">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="space-y-1">
-                <OrderBadge status={order.status} />
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">Ngày đặt <time dateTime={order.created_at}>{orderDate.format(new Date(order.created_at))}</time></p>
+                <OrderBadge status={order.status} indicator />
+                <p className="text-[13px] text-slate-500">Ngày đặt <time dateTime={order.created_at}>{orderDate.format(new Date(order.created_at))}</time></p>
               </div>
               {(canShip || canComplete) && !confirming && (
                 <div className="w-fit">
@@ -87,7 +89,7 @@ function SellerOrderDetail({ id }: { id: string }) {
               )}
             </div>
             {(canShip || canComplete) && confirming && (
-              <div className="space-y-3 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-800">
+              <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3">
                 <p className="text-sm">{canShip
                   ? 'Chỉ xác nhận sau khi bạn đã bàn giao đơn cho đơn vị vận chuyển.'
                   : 'Chỉ xác nhận sau khi đơn đã được giao đến người nhận.'}</p>
@@ -98,7 +100,7 @@ function SellerOrderDetail({ id }: { id: string }) {
               </div>
             )}
           </section>
-          <OrderDetails order={order} />
+          <OrderDetails order={order} panelClassName={detailPanel} />
         </>
       )}
     </>
@@ -107,11 +109,11 @@ function SellerOrderDetail({ id }: { id: string }) {
 
 export default function SellerOrderDetailPage() {
   const { orderId } = useParams()
-  const { search } = useLocation()
+  const { search, state } = useLocation()
 
   return (
     <AppShell>
-      <Link className="inline-flex min-h-11 items-center rounded-md text-sm font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:text-brand-100" to={`/seller/orders${search}`}>
+      <Link className="inline-flex min-h-11 items-center rounded-md text-sm font-semibold text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500" to={`/seller/orders${search}`} state={state}>
         <span aria-hidden="true" className="mr-2">←</span>Về danh sách đơn hàng
       </Link>
       {orderId && <SellerOrderDetail key={orderId} id={orderId} />}
