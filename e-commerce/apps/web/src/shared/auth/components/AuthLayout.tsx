@@ -86,8 +86,8 @@ const loginPerks = [
   'Theo dõi đơn hàng từng bước.',
 ]
 
-/** Editorial two-column layout used only on the login page. */
-export function LoginLayout({ title, subtitle, children, footer }: { title: string; subtitle: string; children: ReactNode; footer: ReactNode }) {
+/** Shared two-column layout for the login and registration pages. */
+export function MarketplaceAuthLayout({ title, subtitle, children, footer }: { title: string; subtitle: string; children: ReactNode; footer: ReactNode }) {
   return (
     <div className="login-page grid min-h-screen w-full grid-cols-1 text-[#18181B] lg:grid-cols-[52fr_48fr]">
       <aside className="hidden flex-col justify-between gap-6 border-r border-[#EFECE6] bg-[#F7F5F2] px-8 py-6 lg:flex xl:px-20 xl:py-[clamp(2rem,4vh,4rem)]">

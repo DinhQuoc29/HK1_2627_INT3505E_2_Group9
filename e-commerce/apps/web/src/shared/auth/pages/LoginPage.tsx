@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
-import { LoginLayout } from '../components/AuthLayout'
+import { MarketplaceAuthLayout } from '../components/AuthLayout'
 import { SocialSignIn } from '../components/SocialSignIn'
 import { Alert, Button, Divider, PasswordField, TextField } from '../components/ui'
 import { describeError, safeRedirect } from '../errors'
@@ -46,7 +46,7 @@ export default function LoginPage() {
   }
 
   return (
-    <LoginLayout
+    <MarketplaceAuthLayout
       title="Chào mừng trở lại"
       subtitle="Đăng nhập để tiếp tục mua sắm cùng E-Market."
       footer={<>Chưa có tài khoản? <Link to="/register" state={location.state} className="ml-1 font-medium text-[#D93E20] hover:underline">Đăng ký ngay</Link></>}
@@ -72,6 +72,6 @@ export default function LoginPage() {
           <SocialSignIn mode="signin" layout="inline" onGoogle={social(loginWithGoogle)} onFacebook={social(loginWithFacebook)} onError={setFormError} />
         </div>
       </div>
-    </LoginLayout>
+    </MarketplaceAuthLayout>
   )
 }
