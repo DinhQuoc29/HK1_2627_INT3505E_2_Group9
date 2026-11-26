@@ -26,6 +26,7 @@ function renderApp(initial = '/login') {
     <MemoryRouter initialEntries={[initial]}>
       <AuthProvider>
         <Routes>
+          <Route path="/" element={<h1>Trang chủ</h1>} />
           <Route element={<GuestOnly />}>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
@@ -59,7 +60,7 @@ describe('Đăng nhập', () => {
     await userEvent.type(await screen.findByLabelText('Email'), 'an@example.com')
     await userEvent.type(screen.getByLabelText('Mật khẩu'), 'Matkhau123')
     await userEvent.click(screen.getByRole('button', { name: 'Đăng nhập' }))
-    expect(await screen.findByRole('heading', { name: 'Tài khoản của tôi' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Trang chủ' })).toBeInTheDocument()
     const call = calls.find((c) => c.url.endsWith('/auth/sessions'))!
     expect(JSON.parse(call.init!.body as string)).toEqual({ email: 'an@example.com', password: 'Matkhau123' })
   })
@@ -106,6 +107,7 @@ describe('Đăng ký', () => {
     await userEvent.type(screen.getByLabelText('Email'), 'an@example.com')
     await userEvent.type(screen.getByLabelText('Mật khẩu'), 'Matkhau123')
     await userEvent.type(screen.getByLabelText('Nhập lại mật khẩu'), 'Matkhau123')
+    await userEvent.click(screen.getByRole('checkbox', { name: /điều khoản sử dụng/ }))
     await userEvent.click(screen.getByRole('button', { name: 'Tạo tài khoản' }))
     await waitFor(() => expect(screen.getByLabelText('Email')).toHaveAttribute('aria-invalid', 'true'))
     expect(screen.getByText('Email này đã được đăng ký.')).toBeInTheDocument()
@@ -118,10 +120,23 @@ describe('Đăng ký', () => {
     await userEvent.type(screen.getByLabelText('Email'), 'an@example.com')
     await userEvent.type(screen.getByLabelText('Mật khẩu'), 'Matkhau123')
     await userEvent.type(screen.getByLabelText('Nhập lại mật khẩu'), 'Matkhau123')
+    await userEvent.click(screen.getByRole('checkbox', { name: /điều khoản sử dụng/ }))
     await userEvent.click(screen.getByRole('button', { name: 'Tạo tài khoản' }))
-    expect(await screen.findByRole('heading', { name: 'Tài khoản của tôi' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Trang chủ' })).toBeInTheDocument()
     const body = JSON.parse(calls.find((c) => c.url.endsWith('/users'))!.init!.body as string)
     expect(body).toEqual({ full_name: 'Nguyễn Văn An', email: 'an@example.com', password: 'Matkhau123' })
+  })
+
+  it('chỉ gửi yêu cầu đăng ký sau khi xác nhận điều khoản', async () => {
+    const calls = mockFetch(() => ok())
+    renderApp('/register')
+    await userEvent.type(await screen.findByLabelText('Họ và tên'), 'Nguyễn Văn An')
+    await userEvent.type(screen.getByLabelText('Email'), 'an@example.com')
+    await userEvent.type(screen.getByLabelText('Mật khẩu'), 'Matkhau123')
+    await userEvent.type(screen.getByLabelText('Nhập lại mật khẩu'), 'Matkhau123')
+    await userEvent.click(screen.getByRole('button', { name: 'Tạo tài khoản' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Vui lòng xác nhận điều khoản')
+    expect(calls.some((c) => c.url.endsWith('/users'))).toBe(false)
   })
 })
 

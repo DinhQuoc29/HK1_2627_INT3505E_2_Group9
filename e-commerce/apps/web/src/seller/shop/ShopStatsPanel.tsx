@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { api, type ShopStatistics } from '../../shared/api/client'
 import { Alert, Spinner } from '../../shared/auth/components/ui'
 import { describeError } from '../../shared/auth/errors'
-import { orderMoney, orderPanel, orderSecondary, orderStatusOptions } from '../orders/orderUi'
+import { orderMoney, orderPanel, orderSecondary, orderStatusOptions } from '../../shared/orders/orderUi'
 
 const count = new Intl.NumberFormat('vi-VN')
 

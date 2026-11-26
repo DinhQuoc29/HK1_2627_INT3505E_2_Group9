@@ -5,32 +5,35 @@ import { SOCIAL_FONT } from './socialStyle'
 
 export const GOOGLE_ENABLED = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID)
 
-/** Nút Google (Google Identity Services). Chưa cấu hình Client ID thì hiển thị nút bị vô hiệu kèm giải thích. */
+/** Nút Google (Google Identity Services). */
 export type GoogleText = 'signin_with' | 'signup_with' | 'continue_with'
 
 export function GoogleSignIn({
-  onCredential, onError, width = 400, text = 'continue_with',
-}: { onCredential: (credential: string) => void; onError: () => void; width?: number; text?: GoogleText }) {
+  onCredential, onError, width = 400, text = 'continue_with', appearance = 'default',
+}: { onCredential: (credential: string) => void; onError: () => void; width?: number; text?: GoogleText; appearance?: 'default' | 'reference' }) {
   if (!GOOGLE_ENABLED) {
+    const reference = appearance === 'reference'
     return (
-      <div>
+      <div className={reference ? 'w-full' : undefined}>
         <button
           type="button"
           disabled
-          className="relative flex h-10 w-full cursor-not-allowed items-center justify-center rounded-full border border-zinc-300 text-sm font-medium text-zinc-400 dark:border-zinc-700"
-          style={{ fontFamily: SOCIAL_FONT }}
+          aria-label={reference ? 'Google hiện chưa khả dụng' : undefined}
+          className={reference
+            ? 'flex h-10 w-full cursor-not-allowed items-center justify-center gap-2 rounded-md border border-[#E4E4E7] bg-white px-3 text-[13px] font-medium text-[#18181B] opacity-70'
+            : 'relative flex h-10 w-full cursor-not-allowed items-center justify-center rounded-full border border-zinc-300 text-sm font-medium text-zinc-400 dark:border-zinc-700'}
+          style={reference ? undefined : { fontFamily: SOCIAL_FONT }}
         >
-          <span className="absolute left-3 flex"><GoogleMark /></span> Tiếp tục với Google
+          <span className={reference ? 'flex' : 'absolute left-3 flex'}><GoogleMark /></span> {reference ? 'Google' : 'Tiếp tục với Google'}
         </button>
-        <p className="mt-1.5 text-center text-xs text-zinc-500">Chưa cấu hình VITE_GOOGLE_CLIENT_ID.</p>
       </div>
     )
   }
-  return <GoogleButton onCredential={onCredential} onError={onError} width={width} text={text} />
+  return <GoogleButton onCredential={onCredential} onError={onError} width={width} text={text} appearance={appearance} />
 }
 
 /** Nút Google chính thức; độ rộng co theo khung chứa (GIS cho phép 200–400px) để không tràn trên màn hình nhỏ. */
-function GoogleButton({ onCredential, onError, width, text }: { onCredential: (c: string) => void; onError: () => void; width: number; text: GoogleText }) {
+function GoogleButton({ onCredential, onError, width, text, appearance }: { onCredential: (c: string) => void; onError: () => void; width: number; text: GoogleText; appearance: 'default' | 'reference' }) {
   const box = useRef<HTMLDivElement>(null)
   const [w, setW] = useState(width)
   useEffect(() => {
@@ -43,12 +46,12 @@ function GoogleButton({ onCredential, onError, width, text }: { onCredential: (c
     return () => ro.disconnect()
   }, [width])
   return (
-    <div ref={box} className="flex w-full justify-center">
+    <div ref={box} className={`flex w-full justify-center ${appearance === 'reference' ? 'login-google-signin' : ''}`}>
       <GoogleLogin
         onSuccess={(r) => (r.credential ? onCredential(r.credential) : onError())}
         onError={onError}
         text={text}
-        shape="pill"
+        shape={appearance === 'reference' ? 'rectangular' : 'pill'}
         size="large"
         width={String(w)}
         theme="outline"

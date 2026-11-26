@@ -9,13 +9,14 @@ import { FacebookSignIn } from '../shared/auth/components/FacebookSignIn'
 import { GoogleSignIn } from '../shared/auth/components/GoogleSignIn'
 import { Alert } from '../shared/auth/components/ui'
 import { describeError } from '../shared/auth/errors'
+import { PersonalizationSettings } from './PersonalizationSettings'
 
 const providerLabel: Record<Provider, string> = { google: 'Google', facebook: 'Facebook' }
 
 function Row({ title, status, children }: { title: string; status: string; children?: React.ReactNode }) {
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 py-4">
-      <div>
+      <div className="min-w-0">
         <p className="font-medium">{title}</p>
         <p className="text-sm text-zinc-500">{status}</p>
       </div>
@@ -44,10 +45,10 @@ export default function AccountPage() {
 
   return (
     <AppShell>
-        <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-6 dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex items-center gap-4">
-            <span className="grid size-14 place-items-center rounded-full bg-brand-100 text-lg font-bold text-brand-700" aria-hidden>{initials}</span>
-            <div>
+            <span className="grid size-12 shrink-0 place-items-center rounded-full bg-brand-100 text-lg font-bold text-brand-700 sm:size-14" aria-hidden>{initials}</span>
+            <div className="min-w-0 wrap-anywhere">
               <h1 className="text-xl font-bold tracking-tight">Xin chào, {user.full_name}</h1>
               <p className="text-sm text-zinc-500">{user.email}</p>
             </div>
@@ -58,6 +59,8 @@ export default function AccountPage() {
             <div><dt className="text-zinc-500">Tham gia từ</dt><dd className="mt-0.5 font-medium">{new Date(user.created_at).toLocaleDateString('vi-VN')}</dd></div>
           </dl>
         </section>
+
+        {user.role === 'buyer' && <PersonalizationSettings key={user.id} />}
 
         {user.role !== 'admin' && (
           <section aria-labelledby="seller-box" className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -71,7 +74,7 @@ export default function AccountPage() {
           </section>
         )}
 
-        <section aria-labelledby="login-methods" className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <section aria-labelledby="login-methods" className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-6 dark:border-zinc-800 dark:bg-zinc-900">
           <h2 id="login-methods" className="text-lg font-semibold tracking-tight">Phương thức đăng nhập</h2>
           {message && <div className="mt-4"><Alert tone={message.tone}>{message.text}</Alert></div>}
           <ul className="mt-2 divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -96,7 +99,7 @@ export default function AccountPage() {
                       {onlyMethod && <p className="mt-1 text-xs text-zinc-500">Đây là cách đăng nhập duy nhất của bạn.</p>}
                     </div>
                   ) : (
-                    <div className="w-full sm:w-[260px]">
+                    <div className="w-full min-w-0 sm:w-[260px]">
                       {p === 'google' ? (
                         <GoogleSignIn width={260} onCredential={(c) => run(() => linkIdentity(p, c), 'Đã liên kết tài khoản Google.')} onError={() => fail('Không thể liên kết Google. Vui lòng thử lại.')} />
                       ) : (

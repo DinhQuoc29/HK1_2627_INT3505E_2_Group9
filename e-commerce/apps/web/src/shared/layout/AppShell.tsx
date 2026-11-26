@@ -6,11 +6,9 @@ import { Alert } from '../auth/components/ui'
 import { describeError } from '../auth/errors'
 import { Logo } from '../auth/components/AuthLayout'
 import { homeFor, roleLabel } from '../auth/roles'
+import { BuyerStoreLayout } from './BuyerStoreLayout'
 
-const nav = {
-  buyer: [{ to: '/account', label: 'Tài khoản' }, { to: '/seller/register', label: 'Bán hàng' }],
-  admin: [{ to: '/admin', label: 'Người dùng' }, { to: '/admin/sellers', label: 'Duyệt người bán' }, { to: '/account', label: 'Tài khoản' }],
-} as const
+const adminNav = [{ to: '/admin', label: 'Người dùng' }, { to: '/admin/sellers', label: 'Duyệt người bán' }, { to: '/account', label: 'Tài khoản' }] as const
 
 const sellerNav = [
   { to: '/seller', label: 'Tổng quan' },
@@ -74,6 +72,14 @@ export function AppShell({ children, width = 'max-w-3xl' }: { children: ReactNod
   const navigate = useNavigate()
   if (!user) return null
   const { role } = user
+  if (role === 'buyer') {
+    return (
+      <BuyerStoreLayout>
+        {!user.email_verified && <VerifyEmailBanner />}
+        <div className={`mx-auto min-w-0 space-y-6 px-4 py-7 sm:px-6 sm:py-10 ${width}`}>{children}</div>
+      </BuyerStoreLayout>
+    )
+  }
   const containerWidth = role === 'seller' ? 'max-w-6xl' : width
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950">
@@ -87,7 +93,7 @@ export function AppShell({ children, width = 'max-w-3xl' }: { children: ReactNod
               </span>
             ) : (
               <nav aria-label="Điều hướng chính" className="flex gap-1 text-sm font-medium">
-                {nav[role].map((n) => (
+                {adminNav.map((n) => (
                   <NavLink key={n.to} to={n.to} end className={({ isActive }) => `rounded-lg px-3 py-1.5 transition hover:bg-zinc-100 dark:hover:bg-zinc-800 ${isActive ? 'bg-brand-50 text-brand-700 dark:bg-zinc-800' : 'text-zinc-600 dark:text-zinc-300'}`}>{n.label}</NavLink>
                 ))}
               </nav>

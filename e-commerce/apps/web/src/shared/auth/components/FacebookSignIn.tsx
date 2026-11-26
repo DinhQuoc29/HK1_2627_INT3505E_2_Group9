@@ -41,14 +41,15 @@ const FacebookMark = () => (
 )
 
 const base = 'relative flex h-10 w-full items-center justify-center rounded-full text-sm font-medium transition'
+const referenceClass = 'login-social-facebook relative flex h-10 w-full items-center justify-center gap-2 rounded-md border border-[#E4E4E7] bg-white px-3 text-[13px] font-medium text-[#18181B] transition hover:bg-stone-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1877F2] disabled:cursor-not-allowed disabled:opacity-70'
 
 /**
  * Nút "Tiếp tục với Facebook". SDK được nạp sẵn khi hiển thị để lệnh FB.login chạy ngay trong cú nhấp chuột
  * (trình duyệt chặn popup nếu gọi sau khi chờ bất đồng bộ). Người dùng đóng cửa sổ thì không báo lỗi.
  */
 export function FacebookSignIn({
-  onToken, onError, appId = facebookAppId(), label = 'Tiếp tục với Facebook',
-}: { onToken: (accessToken: string) => void; onError: (message: string) => void; appId?: string; label?: string }) {
+  onToken, onError, appId = facebookAppId(), label = 'Tiếp tục với Facebook', appearance = 'default',
+}: { onToken: (accessToken: string) => void; onError: (message: string) => void; appId?: string; label?: string; appearance?: 'default' | 'reference' }) {
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
@@ -65,10 +66,9 @@ export function FacebookSignIn({
   if (!appId) {
     return (
       <div>
-        <button type="button" disabled style={{ fontFamily: SOCIAL_FONT }} className={`${base} cursor-not-allowed border border-zinc-300 text-zinc-400 dark:border-zinc-700`}>
-          <span className="absolute left-3 flex"><FacebookMark /></span> {label}
+        <button type="button" disabled aria-label={appearance === 'reference' ? 'Facebook hiện chưa khả dụng' : undefined} style={appearance === 'reference' ? undefined : { fontFamily: SOCIAL_FONT }} className={appearance === 'reference' ? referenceClass : `${base} cursor-not-allowed border border-zinc-300 text-zinc-400 dark:border-zinc-700`}>
+          <span className={appearance === 'reference' ? 'flex text-[#1877F2]' : 'absolute left-3 flex'}><FacebookMark /></span> {label}
         </button>
-        <p className="mt-1.5 text-center text-xs text-zinc-500">Chưa cấu hình VITE_FACEBOOK_APP_ID.</p>
       </div>
     )
   }
@@ -77,16 +77,18 @@ export function FacebookSignIn({
     <button
       type="button"
       disabled={!ready}
-      style={{ fontFamily: SOCIAL_FONT }}
+      style={appearance === 'reference' ? undefined : { fontFamily: SOCIAL_FONT }}
       onClick={() =>
         window.FB?.login(
           (r) => { if (r.authResponse?.accessToken) onToken(r.authResponse.accessToken) },
           { scope: 'public_profile,email' },
         )
       }
-      className={`${base} bg-[#1877F2] text-white hover:bg-[#166fe0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1877F2] disabled:cursor-wait disabled:opacity-70`}
+      className={appearance === 'reference'
+        ? referenceClass
+        : `${base} bg-[#1877F2] text-white hover:bg-[#166fe0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1877F2] disabled:cursor-wait disabled:opacity-70`}
     >
-      <span className="absolute left-3 flex"><FacebookMark /></span> {label}
+      <span className={appearance === 'reference' ? 'flex text-[#1877F2]' : 'absolute left-3 flex'}><FacebookMark /></span> {label}
     </button>
   )
 }

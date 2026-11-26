@@ -15,7 +15,7 @@ export function Spinner({ label }: { label?: string }) {
   )
 }
 
-export function Button({ loading, children, ...p }: { loading?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+export function Button({ loading, children, className, ...p }: { loading?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       {...p}
@@ -24,6 +24,7 @@ export function Button({ loading, children, ...p }: { loading?: boolean } & Reac
         'inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 text-sm font-semibold text-white shadow-sm shadow-brand-600/20',
         'transition hover:bg-brand-700 active:scale-[.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
         'disabled:cursor-not-allowed disabled:opacity-60',
+        className,
       )}
     >
       {loading && <Spinner />}
@@ -32,10 +33,11 @@ export function Button({ loading, children, ...p }: { loading?: boolean } & Reac
   )
 }
 
-export function Alert({ children, tone = 'error' }: { children: ReactNode; tone?: 'error' | 'info' | 'success' }) {
+export function Alert({ children, tone = 'error', className }: { children: ReactNode; tone?: 'error' | 'info' | 'success'; className?: string }) {
   return (
     <div
       role={tone === 'error' ? 'alert' : 'status'}
+      data-alert-tone={tone}
       className={cx(
         'flex gap-3 rounded-xl border px-4 py-3 text-sm',
         tone === 'error'
@@ -43,12 +45,13 @@ export function Alert({ children, tone = 'error' }: { children: ReactNode; tone?
           : tone === 'success'
             ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200'
             : 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300',
+        className,
       )}
     >
       <svg className="mt-0.5 size-4 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
         <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.9.9 0 0 0-.9.9v4.2a.9.9 0 0 0 1.8 0V5.9A.9.9 0 0 0 10 5Zm0 8.2a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2Z" clipRule="evenodd" />
       </svg>
-      <div>{children}</div>
+      <div className="min-w-0 wrap-anywhere">{children}</div>
     </div>
   )
 }
@@ -72,7 +75,7 @@ export const TextField = forwardRef<HTMLInputElement, FieldProps>(function TextF
       <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">{label}</label>
       <input id={id} ref={ref} aria-invalid={!!error} aria-describedby={describedBy} className={inputClass(!!error)} {...p} />
       {error ? (
-        <p id={`${id}-err`} className="mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p>
+        <p id={`${id}-err`} className="auth-field-error mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p>
       ) : hint ? (
         <p id={`${id}-hint`} className="mt-1.5 text-xs text-zinc-500">{hint}</p>
       ) : null}
@@ -91,15 +94,15 @@ export const SelectField = forwardRef<HTMLSelectElement, SelectProps>(function S
         <option value="">{placeholder ?? 'Chọn…'}</option>
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
-      {error && <p id={`${id}-err`} className="mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p id={`${id}-err`} className="auth-field-error mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p>}
     </div>
   )
 })
 
-type PasswordProps = FieldProps & { showRules?: boolean; value?: string }
+type PasswordProps = FieldProps & { showRules?: boolean; value?: string; labelAction?: ReactNode }
 
 export const PasswordField = forwardRef<HTMLInputElement, PasswordProps>(function PasswordField(
-  { label, error, hint, showRules, value = '', className, ...p },
+  { label, error, hint, showRules, value = '', labelAction, className, ...p },
   ref,
 ) {
   const id = useId()
@@ -107,7 +110,14 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordProps>(functio
   const describedBy = error ? `${id}-err` : showRules ? `${id}-rules` : hint ? `${id}-hint` : undefined
   return (
     <div className={className}>
-      <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">{label}</label>
+      {labelAction ? (
+        <div className="login-password-label-row mb-1.5 flex items-center justify-between gap-3">
+          <label htmlFor={id} className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{label}</label>
+          <span>{labelAction}</span>
+        </div>
+      ) : (
+        <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">{label}</label>
+      )}
       <div className="relative">
         <input
           id={id}
@@ -139,13 +149,13 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordProps>(functio
           </svg>
         </button>
       </div>
-      {error && <p id={`${id}-err`} className="mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p id={`${id}-err`} className="auth-field-error mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p>}
       {showRules && (
         <ul id={`${id}-rules`} className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs" aria-label="Yêu cầu mật khẩu">
           {passwordRules.map((r) => {
             const ok = r.test(value)
             return (
-              <li key={r.id} className={cx('flex items-center gap-1.5', ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-500')}>
+              <li key={r.id} data-rule-met={ok} className={cx('flex items-center gap-1.5', ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-500')}>
                 <svg className="size-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
                   {ok ? (
                     <path fillRule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.7a1 1 0 1 1 1.4-1.4l3.8 3.8 6.8-6.8a1 1 0 0 1 1.4 0Z" clipRule="evenodd" />
@@ -165,9 +175,9 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordProps>(functio
   )
 })
 
-export function Divider({ children }: { children: ReactNode }) {
+export function Divider({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-zinc-400" role="separator">
+    <div className={cx('flex items-center gap-3 text-xs uppercase tracking-wide text-zinc-400', className)} role="separator">
       <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
       {children}
       <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />

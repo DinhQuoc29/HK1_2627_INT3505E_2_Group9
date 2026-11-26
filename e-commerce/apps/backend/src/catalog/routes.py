@@ -6,8 +6,9 @@ from fastapi import APIRouter, Depends, Query, Response
 
 from accounts.authentication import CurrentAuth
 from accounts.permissions import require_role
-from catalog import categories, listings, repository, shops
+from catalog import categories, listings, repository, shops, storefront
 from catalog.schema import (
+    CatalogCategoryGroup, CatalogProductDetail, CatalogProductPage,
     CreateShopRequest, ProductCategoryOut, ProductInput, ProductState, ProductStatusRequest, ProvinceOut, SellerProductOut,
     SellerProductPage, ShopOut,
 )
@@ -21,6 +22,39 @@ SellerAuth = Annotated[CurrentAuth, Depends(require_role("seller"))]
 def list_provinces():
     with session_scope() as s:
         return [ProvinceOut.model_validate(p) for p in repository.list_provinces(s)]
+
+
+@router.get("/categories", response_model=list[CatalogCategoryGroup])
+def list_categories():
+    with session_scope() as s:
+        return categories.category_tree(s)
+
+
+@router.get("/products", response_model=CatalogProductPage)
+def browse_products(
+    response: Response,
+    q: str = Query("", max_length=255, pattern=r"^[^\x00]*$"),
+    category: str | None = Query(None, min_length=1, max_length=120, pattern=r"^[^\x00]+$"),
+    min_price: int | None = Query(None, ge=0, le=9_007_199_254_740_991),
+    max_price: int | None = Query(None, ge=0, le=9_007_199_254_740_991),
+    brand: str | None = Query(None, max_length=100, pattern=r"^[^\x00]*$"),
+    province_code: str | None = Query(None, min_length=1, max_length=4, pattern=r"^[^\x00]+$"),
+    page: int = Query(1, ge=1, le=100_000),
+    limit: int = Query(12, ge=1, le=50),
+):
+    response.headers["Cache-Control"] = "no-store"
+    with session_scope() as s:
+        return storefront.list_products(
+            s, q=q, category=category, min_price=min_price, max_price=max_price,
+            brand=brand, province_code=province_code, page=page, limit=limit,
+        )
+
+
+@router.get("/products/{product_id}", response_model=CatalogProductDetail)
+def get_product(product_id: uuid.UUID, response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    with session_scope() as s:
+        return storefront.product_detail(s, product_id)
 
 
 @router.get("/shops/me", response_model=ShopOut)

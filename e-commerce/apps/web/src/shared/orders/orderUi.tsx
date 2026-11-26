@@ -1,4 +1,4 @@
-import type { OrderStatus } from '../../shared/api/client'
+import type { OrderStatus } from '../api/client'
 
 const statuses: Record<OrderStatus, { label: string; style: string }> = {
   pending_payment: { label: 'Chờ thanh toán', style: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300' },

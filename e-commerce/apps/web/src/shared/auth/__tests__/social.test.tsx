@@ -2,6 +2,8 @@ import { render, screen } from '@testing-library/react'
 import { SocialSignIn } from '../components/SocialSignIn'
 
 describe('SocialSignIn: hai nút Google và Facebook đồng bộ', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
   it.each([
     ['signin', 'Đăng nhập bằng Facebook'],
     ['signup', 'Đăng ký bằng Facebook'],
@@ -19,5 +21,12 @@ describe('SocialSignIn: hai nút Google và Facebook đồng bộ', () => {
       expect(b.className).toContain('w-full')
       expect(b.style.fontFamily).toContain('Roboto')
     }
+  })
+
+  it('trang đăng nhập luôn hiện cả hai nút nhưng không cho bấm khi chưa cấu hình', () => {
+    vi.stubEnv('VITE_FACEBOOK_APP_ID', '')
+    render(<SocialSignIn mode="signin" layout="inline" onGoogle={vi.fn()} onFacebook={vi.fn()} onError={vi.fn()} />)
+    expect(screen.getByRole('button', { name: /Google hiện chưa khả dụng/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Facebook hiện chưa khả dụng/ })).toBeDisabled()
   })
 })

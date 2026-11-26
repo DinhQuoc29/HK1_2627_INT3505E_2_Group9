@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
-import { AuthLayout } from '../components/AuthLayout'
+import { MarketplaceAuthLayout } from '../components/AuthLayout'
 import { SocialSignIn } from '../components/SocialSignIn'
 import { Alert, Button, Divider, PasswordField, TextField } from '../components/ui'
 import { describeError, safeRedirect } from '../errors'
@@ -46,23 +46,32 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthLayout
+    <MarketplaceAuthLayout
       title="Chào mừng trở lại"
-      subtitle="Đăng nhập để tiếp tục mua sắm và theo dõi đơn hàng."
-      footer={<>Chưa có tài khoản? <Link to="/register" state={location.state} className="font-semibold text-brand-600 hover:underline">Đăng ký</Link></>}
+      subtitle="Đăng nhập để tiếp tục mua sắm cùng E-Market."
+      footer={<>Chưa có tài khoản? <Link to="/register" state={location.state} className="ml-1 font-medium text-[#D93E20] hover:underline">Đăng ký ngay</Link></>}
     >
-      {notice && !formError && <Alert tone="info">{notice}</Alert>}
-      {formError && <Alert>{formError}</Alert>}
-      <form onSubmit={onSubmit} noValidate className="space-y-4">
-        <TextField label="Email" type="email" autoComplete="email" inputMode="email" placeholder="ban@example.com" autoFocus error={errors.email?.message} {...register('email')} />
-        <PasswordField label="Mật khẩu" autoComplete="current-password" placeholder="Nhập mật khẩu" error={errors.password?.message} {...register('password')} />
-        <div className="-mt-2 text-right"><Link to="/forgot-password" className="text-sm font-medium text-brand-600 hover:underline">Quên mật khẩu?</Link></div>
-        <Button type="submit" loading={isSubmitting}>Đăng nhập</Button>
-      </form>
-      <Divider>hoặc</Divider>
-      <div aria-busy={googleBusy} className={googleBusy ? 'pointer-events-none opacity-60' : undefined}>
-        <SocialSignIn mode="signin" onGoogle={social(loginWithGoogle)} onFacebook={social(loginWithFacebook)} onError={setFormError} />
+      <div className="space-y-4">
+        {notice && !formError && <Alert tone="info">{notice}</Alert>}
+        {formError && <Alert>{formError}</Alert>}
+        <form onSubmit={onSubmit} noValidate className="login-form space-y-5">
+          <TextField className="login-field" label="Email" type="email" autoComplete="email" inputMode="email" placeholder="ten@example.com" error={errors.email?.message} {...register('email')} />
+          <PasswordField
+            className="login-field"
+            label="Mật khẩu"
+            labelAction={<Link to="/forgot-password" className="text-xs font-medium text-[#71717A] transition-colors hover:text-[#18181B]">Quên mật khẩu?</Link>}
+            autoComplete="current-password"
+            placeholder="Nhập mật khẩu của bạn"
+            error={errors.password?.message}
+            {...register('password')}
+          />
+          <Button className="login-submit-button" type="submit" loading={isSubmitting}>Đăng nhập</Button>
+        </form>
+        <div aria-busy={googleBusy} className={`space-y-5 pt-2 ${googleBusy ? 'pointer-events-none opacity-60' : ''}`}>
+          <Divider className="login-divider">hoặc</Divider>
+          <SocialSignIn mode="signin" layout="inline" onGoogle={social(loginWithGoogle)} onFacebook={social(loginWithFacebook)} onError={setFormError} />
+        </div>
       </div>
-    </AuthLayout>
+    </MarketplaceAuthLayout>
   )
 }
