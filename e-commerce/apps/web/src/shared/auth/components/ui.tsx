@@ -37,6 +37,7 @@ export function Alert({ children, tone = 'error', className }: { children: React
   return (
     <div
       role={tone === 'error' ? 'alert' : 'status'}
+      data-alert-tone={tone}
       className={cx(
         'flex gap-3 rounded-xl border px-4 py-3 text-sm',
         tone === 'error'
@@ -74,7 +75,7 @@ export const TextField = forwardRef<HTMLInputElement, FieldProps>(function TextF
       <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">{label}</label>
       <input id={id} ref={ref} aria-invalid={!!error} aria-describedby={describedBy} className={inputClass(!!error)} {...p} />
       {error ? (
-        <p id={`${id}-err`} className="mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p>
+        <p id={`${id}-err`} className="auth-field-error mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p>
       ) : hint ? (
         <p id={`${id}-hint`} className="mt-1.5 text-xs text-zinc-500">{hint}</p>
       ) : null}
@@ -93,7 +94,7 @@ export const SelectField = forwardRef<HTMLSelectElement, SelectProps>(function S
         <option value="">{placeholder ?? 'Chọn…'}</option>
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
-      {error && <p id={`${id}-err`} className="mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p id={`${id}-err`} className="auth-field-error mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p>}
     </div>
   )
 })
@@ -148,13 +149,13 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordProps>(functio
           </svg>
         </button>
       </div>
-      {error && <p id={`${id}-err`} className="mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p id={`${id}-err`} className="auth-field-error mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p>}
       {showRules && (
         <ul id={`${id}-rules`} className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs" aria-label="Yêu cầu mật khẩu">
           {passwordRules.map((r) => {
             const ok = r.test(value)
             return (
-              <li key={r.id} className={cx('flex items-center gap-1.5', ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-500')}>
+              <li key={r.id} data-rule-met={ok} className={cx('flex items-center gap-1.5', ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-500')}>
                 <svg className="size-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
                   {ok ? (
                     <path fillRule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.7a1 1 0 1 1 1.4-1.4l3.8 3.8 6.8-6.8a1 1 0 0 1 1.4 0Z" clipRule="evenodd" />

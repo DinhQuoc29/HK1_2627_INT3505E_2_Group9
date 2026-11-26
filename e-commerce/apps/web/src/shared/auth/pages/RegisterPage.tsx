@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
@@ -18,6 +18,7 @@ export default function RegisterPage() {
   const [socialBusy, setSocialBusy] = useState(false)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [termsError, setTermsError] = useState(false)
+  const termsErrorId = useId()
   const from = (location.state as { from?: string } | null)?.from
   const dest = (u: { role: Parameters<typeof homeFor>[0] }) => safeRedirect(from, homeFor(u.role))
 
@@ -59,7 +60,7 @@ export default function RegisterPage() {
       footer={<>Đã có tài khoản? <Link to="/login" state={location.state} className="ml-1 font-medium text-[#D93E20] hover:underline">Đăng nhập</Link></>}
     >
       <div className="space-y-4">
-        {formError && <Alert className="login-error-alert">{formError}</Alert>}
+        {formError && <Alert>{formError}</Alert>}
         <form onSubmit={onSubmit} noValidate className="space-y-4">
           <TextField className="login-field" label="Họ và tên" autoComplete="name" placeholder="Nguyễn Văn An" error={errors.full_name?.message} {...register('full_name')} />
           <TextField className="login-field" label="Email" type="email" autoComplete="email" inputMode="email" placeholder="ban@example.com" error={errors.email?.message} {...register('email')} />
@@ -71,6 +72,7 @@ export default function RegisterPage() {
                 type="checkbox"
                 checked={acceptedTerms}
                 aria-invalid={termsError}
+                aria-describedby={termsError ? termsErrorId : undefined}
                 onChange={(event) => {
                   setAcceptedTerms(event.target.checked)
                   setTermsError(false)
@@ -79,7 +81,11 @@ export default function RegisterPage() {
               />
               <span>Tôi đồng ý với điều khoản sử dụng của E-Market.</span>
             </label>
-            {termsError && <p role="alert" className="mt-1.5 text-xs text-[#9F2D1B]">Vui lòng xác nhận điều khoản trước khi tạo tài khoản.</p>}
+            {termsError && (
+              <p id={termsErrorId} role="alert" className="auth-field-error mt-1.5 pl-7 text-xs">
+                Vui lòng xác nhận điều khoản trước khi tạo tài khoản.
+              </p>
+            )}
           </div>
           <Button className="login-submit-button" type="submit" loading={isSubmitting}>Tạo tài khoản</Button>
         </form>

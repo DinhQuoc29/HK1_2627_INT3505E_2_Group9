@@ -86,7 +86,7 @@ const loginPerks = [
   'Theo dõi đơn hàng từng bước.',
 ]
 
-/** Shared two-column layout for the login and registration pages. */
+/** Shared two-column layout for sign-in, registration, and password recovery. */
 export function MarketplaceAuthLayout({ title, subtitle, children, footer }: { title: string; subtitle: string; children: ReactNode; footer: ReactNode }) {
   return (
     <div className="login-page grid min-h-screen w-full grid-cols-1 text-[#18181B] lg:grid-cols-[52fr_48fr]">

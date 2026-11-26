@@ -53,7 +53,7 @@ export default function LoginPage() {
     >
       <div className="space-y-4">
         {notice && !formError && <Alert tone="info">{notice}</Alert>}
-        {formError && <Alert className="login-error-alert">{formError}</Alert>}
+        {formError && <Alert>{formError}</Alert>}
         <form onSubmit={onSubmit} noValidate className="login-form space-y-5">
           <TextField className="login-field" label="Email" type="email" autoComplete="email" inputMode="email" placeholder="ten@example.com" error={errors.email?.message} {...register('email')} />
           <PasswordField
