@@ -21,3 +21,108 @@ body {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+.login-page {
+  color-scheme: light;
+  font-family: 'Be Vietnam Pro', var(--font-sans);
+}
+
+.login-page .login-error-alert {
+  min-height: 50px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #f1cbc1;
+  border-radius: 11px;
+  background-color: #fff7f4;
+  padding: 12px 14px;
+  color: #9f2d1b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.login-page .login-error-alert svg {
+  margin-top: 0;
+  color: #bf3e29;
+}
+
+.login-page .login-field > label {
+  margin-bottom: 0.375rem;
+  color: #3f3f46;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.login-page .login-field > div > label {
+  margin-bottom: 0;
+  color: #3f3f46;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.login-page .login-password-label-row {
+  margin-bottom: 0.375rem;
+}
+
+.login-page .login-field input {
+  height: 50px;
+  border-color: #e4e4e7;
+  border-radius: 11px;
+  background-color: #fff;
+  padding-left: 16px;
+  color: #18181b;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.login-page .login-field input::placeholder {
+  color: #a1a1aa;
+  opacity: 1;
+}
+
+.login-page .login-field input:focus {
+  border-color: #71717a;
+  outline: none;
+  box-shadow: 0 0 0 1px rgb(24 24 27 / 8%);
+}
+
+.login-page .login-field input[aria-invalid="true"] {
+  border-color: #f87171;
+}
+
+.login-page .login-field input[aria-invalid="true"]:focus {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 2px rgb(239 68 68 / 12%);
+}
+
+.login-page .login-submit-button {
+  height: 50px;
+  border-radius: 11px;
+  background-color: #d93e20;
+  box-shadow: none;
+  font-size: 14px;
+}
+
+.login-page .login-submit-button:hover {
+  background-color: #c63318;
+}
+
+.login-page .login-divider {
+  color: #a1a1aa;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.login-page .login-divider > span {
+  background-color: #e4e4e7;
+}
+
+.login-page .login-google-signin {
+  min-height: 40px;
+  align-items: center;
+}
+
+@media (max-width: 639px) {
+  .login-page .login-field input {
+    font-size: 16px;
+  }
+}

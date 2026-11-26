@@ -15,7 +15,7 @@ export function Spinner({ label }: { label?: string }) {
   )
 }
 
-export function Button({ loading, children, ...p }: { loading?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
+export function Button({ loading, children, className, ...p }: { loading?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       {...p}
@@ -24,6 +24,7 @@ export function Button({ loading, children, ...p }: { loading?: boolean } & Reac
         'inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 text-sm font-semibold text-white shadow-sm shadow-brand-600/20',
         'transition hover:bg-brand-700 active:scale-[.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600',
         'disabled:cursor-not-allowed disabled:opacity-60',
+        className,
       )}
     >
       {loading && <Spinner />}
@@ -32,7 +33,7 @@ export function Button({ loading, children, ...p }: { loading?: boolean } & Reac
   )
 }
 
-export function Alert({ children, tone = 'error' }: { children: ReactNode; tone?: 'error' | 'info' | 'success' }) {
+export function Alert({ children, tone = 'error', className }: { children: ReactNode; tone?: 'error' | 'info' | 'success'; className?: string }) {
   return (
     <div
       role={tone === 'error' ? 'alert' : 'status'}
@@ -43,6 +44,7 @@ export function Alert({ children, tone = 'error' }: { children: ReactNode; tone?
           : tone === 'success'
             ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200'
             : 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300',
+        className,
       )}
     >
       <svg className="mt-0.5 size-4 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
@@ -96,10 +98,10 @@ export const SelectField = forwardRef<HTMLSelectElement, SelectProps>(function S
   )
 })
 
-type PasswordProps = FieldProps & { showRules?: boolean; value?: string }
+type PasswordProps = FieldProps & { showRules?: boolean; value?: string; labelAction?: ReactNode }
 
 export const PasswordField = forwardRef<HTMLInputElement, PasswordProps>(function PasswordField(
-  { label, error, hint, showRules, value = '', className, ...p },
+  { label, error, hint, showRules, value = '', labelAction, className, ...p },
   ref,
 ) {
   const id = useId()
@@ -107,7 +109,14 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordProps>(functio
   const describedBy = error ? `${id}-err` : showRules ? `${id}-rules` : hint ? `${id}-hint` : undefined
   return (
     <div className={className}>
-      <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">{label}</label>
+      {labelAction ? (
+        <div className="login-password-label-row mb-1.5 flex items-center justify-between gap-3">
+          <label htmlFor={id} className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">{label}</label>
+          <span>{labelAction}</span>
+        </div>
+      ) : (
+        <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">{label}</label>
+      )}
       <div className="relative">
         <input
           id={id}
@@ -165,9 +174,9 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordProps>(functio
   )
 })
 
-export function Divider({ children }: { children: ReactNode }) {
+export function Divider({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className="flex items-center gap-3 text-xs uppercase tracking-wide text-zinc-400" role="separator">
+    <div className={cx('flex items-center gap-3 text-xs uppercase tracking-wide text-zinc-400', className)} role="separator">
       <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
       {children}
       <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />

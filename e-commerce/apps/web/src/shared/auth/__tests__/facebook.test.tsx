@@ -35,10 +35,10 @@ function mockApi(routes: (c: Call) => Response) {
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); delete window.FB; setAccessToken(null) })
 
 describe('FacebookSignIn', () => {
-  it('chưa cấu hình App ID thì nút bị vô hiệu kèm giải thích', () => {
+  it('chưa cấu hình App ID thì nút bị vô hiệu mà không hiện thông tin môi trường', () => {
     render(<FacebookSignIn appId="" onToken={vi.fn()} onError={vi.fn()} />)
     expect(screen.getByRole('button', { name: /Facebook/ })).toBeDisabled()
-    expect(screen.getByText(/VITE_FACEBOOK_APP_ID/)).toBeInTheDocument()
+    expect(screen.queryByText(/VITE_FACEBOOK_APP_ID/)).not.toBeInTheDocument()
   })
 
   it('xin quyền email và trả access token khi đăng nhập thành công', async () => {
@@ -70,6 +70,7 @@ function renderAuth(path: string) {
     <MemoryRouter initialEntries={[path]}>
       <AuthProvider>
         <Routes>
+          <Route path="/" element={<h1>Trang chủ</h1>} />
           <Route element={<GuestOnly />}>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
@@ -90,7 +91,7 @@ describe('Đăng nhập bằng Facebook', () => {
     const btn = await screen.findByRole('button', { name: /Facebook/ })
     await waitFor(() => expect(btn).toBeEnabled())
     await userEvent.click(btn)
-    expect(await screen.findByRole('heading', { name: /Xin chào, Nguyễn Văn An/ })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Trang chủ' })).toBeInTheDocument()
     expect(calls.find((c) => c.url === '/auth/sessions/facebook')?.body).toEqual({ access_token: 'fb-token' })
   })
 

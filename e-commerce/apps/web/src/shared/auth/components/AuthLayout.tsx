@@ -2,15 +2,18 @@ import type { ReactNode } from 'react'
 
 export const BRAND = 'E-Market'
 
-export function Logo({ light = false }: { light?: boolean }) {
+export function Logo({ light = false, variant = 'default' }: { light?: boolean; variant?: 'default' | 'auth' }) {
   return (
-    <div className="flex items-center gap-2.5">
-      <span className={`grid size-9 place-items-center rounded-xl ${light ? 'bg-white/15 ring-1 ring-white/30' : 'bg-brand-600'}`}>
-        <svg className="size-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <path d="M5 8h14l-1.3 10a2 2 0 0 1-2 1.7H8.3a2 2 0 0 1-2-1.7L5 8Zm3.5-1.5a3.5 3.5 0 0 1 7 0" />
-        </svg>
-      </span>
-      <span className={`text-lg font-bold tracking-tight ${light ? 'text-white' : 'text-zinc-900 dark:text-white'}`}>{BRAND}</span>
+    <div className={`flex w-fit max-w-full shrink-0 items-center rounded-lg ${light ? 'bg-white' : ''}`}>
+      <img
+        src="/logo.png"
+        alt={BRAND}
+        width={2172}
+        height={724}
+        className={variant === 'auth'
+          ? 'block h-auto w-48 max-w-full sm:w-56'
+          : 'block h-auto w-40 max-w-full rounded-lg dark:bg-white'}
+      />
     </div>
   )
 }
@@ -71,6 +74,69 @@ export function AuthLayout({ title, subtitle, children, footer }: { title: strin
           <p className="mt-1.5 text-sm text-zinc-500 dark:text-zinc-400">{subtitle}</p>
           <div className="mt-7 space-y-5">{children}</div>
           <p className="mt-8 text-center text-sm text-zinc-500 dark:text-zinc-400">{footer}</p>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+const loginPerks = [
+  'Gợi ý sản phẩm hợp ngân sách của bạn.',
+  'Một giỏ hàng, nhiều shop – tự tách đơn.',
+  'Theo dõi đơn hàng từng bước.',
+]
+
+/** Editorial two-column layout used only on the login page. */
+export function LoginLayout({ title, subtitle, children, footer }: { title: string; subtitle: string; children: ReactNode; footer: ReactNode }) {
+  return (
+    <div className="login-page grid min-h-screen w-full grid-cols-1 text-[#18181B] lg:grid-cols-[52fr_48fr]">
+      <aside className="hidden flex-col justify-between gap-6 border-r border-[#EFECE6] bg-[#F7F5F2] px-8 py-6 lg:flex xl:px-20 xl:py-[clamp(2rem,4vh,4rem)]">
+        <div className="mx-auto w-4/5 max-w-[538px]">
+          <Logo variant="auth" />
+        </div>
+
+        <div className="mx-auto w-4/5 max-w-[538px] py-2">
+          <img
+            src="/login-marketplace.png"
+            alt="Tai nghe, giày sneaker, túi xách và phụ kiện trên nền đá sáng"
+            width={1200}
+            height={896}
+            className="mb-6 block h-auto w-full rounded-xl border border-stone-200/70 shadow-[0_16px_32px_-12px_rgba(24,24,27,0.08)]"
+          />
+          <h2 className="mb-3 text-[21px] font-semibold leading-tight tracking-tight text-[#18181B] xl:text-[22px]">
+            Mua sắm thông minh, đúng thứ bạn cần.
+          </h2>
+          <p className="mb-8 max-w-[416px] text-[13px] leading-[1.8] text-[#52525B]">
+            Khám phá sản phẩm phù hợp với phong cách và ngân sách của bạn.
+          </p>
+          <ul className="space-y-4">
+            {loginPerks.map((perk, index) => (
+              <li key={perk} className="flex items-center gap-3 text-xs font-medium tracking-tight text-stone-800">
+                <span className="grid size-5 shrink-0 place-items-center rounded-full border border-stone-300 font-mono text-[10px] font-medium tracking-wide text-stone-400">
+                  0{index + 1}
+                </span>
+                <span>{perk}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <p className="text-xs tracking-wide text-stone-400">
+          © {new Date().getFullYear()} {BRAND}. Dự án học phần SOA.
+        </p>
+      </aside>
+
+      <main className="flex min-h-screen items-center justify-center bg-white px-6 py-8 sm:px-10 xl:px-12">
+        <div className="w-full max-w-[420px] @container">
+          <div className="mb-7 lg:hidden"><Logo variant="auth" /></div>
+          <header>
+            <h1 className="text-[26px] font-semibold leading-tight tracking-tight text-[#18181B] sm:text-[32px]">{title}</h1>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-[#71717A]">{subtitle}</p>
+          </header>
+          <div className="mt-7">
+            {children}
+          </div>
+          <p className="mt-8 text-center text-[13px] tracking-tight text-[#71717A]">{footer}</p>
         </div>
       </main>
     </div>
