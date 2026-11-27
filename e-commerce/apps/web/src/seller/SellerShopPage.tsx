@@ -4,7 +4,7 @@ import { useAuth } from '../shared/auth/AuthContext'
 import { AppShell } from '../shared/layout/AppShell'
 import { Alert, Button, Spinner } from '../shared/auth/components/ui'
 import { describeError } from '../shared/auth/errors'
-import { orderSecondary } from '../shared/orders/orderUi'
+import { SellerIcon, SellerInitials, sellerCard } from './sellerUi'
 import { ShopEditor } from './shop/ShopEditor'
 import { ShopStatsPanel } from './shop/ShopStatsPanel'
 
@@ -14,8 +14,9 @@ type ShopState =
   | { status: 'error'; message: string; canRetry: boolean }
 
 const shopDate = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeZone: 'Asia/Ho_Chi_Minh' })
+const updateTime = new Intl.DateTimeFormat('vi-VN', { timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' })
 
-function ShopOverview() {
+function ShopOverview({ onStatsLoaded }: { onStatsLoaded: (updatedAt: Date) => void }) {
   const [state, setState] = useState<ShopState>({ status: 'loading' })
   const [attempt, setAttempt] = useState(0)
   const [editing, setEditing] = useState(false)
@@ -49,7 +50,7 @@ function ShopOverview() {
     return () => { cancelled = true }
   }, [attempt])
 
-  if (state.status === 'loading') return <Spinner label="Đang tải shop…" />
+  if (state.status === 'loading') return <section className={sellerCard}><Spinner label="Đang tải shop…" /></section>
 
   if (state.status === 'error') {
     const retry = () => {
@@ -57,14 +58,14 @@ function ShopOverview() {
       setAttempt((previous) => previous + 1)
     }
     return (
-      <div className="space-y-4">
+      <section className={`${sellerCard} space-y-4`}>
         <Alert>{state.message}</Alert>
         {state.canRetry && (
           <div className="w-fit">
             <Button type="button" onClick={retry}>Thử lại</Button>
           </div>
         )}
-      </div>
+      </section>
     )
   }
 
@@ -72,30 +73,45 @@ function ShopOverview() {
   return (
     <>
       {notice && <Alert tone="success">{notice}</Alert>}
-      <section
-        aria-label="Thông tin shop"
-        className="min-w-0 rounded-2xl border border-zinc-200 border-t-4 border-t-brand-500 bg-white p-5 shadow-sm sm:p-7 dark:border-zinc-800 dark:border-t-brand-500 dark:bg-zinc-900"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="min-w-0 text-xl font-semibold tracking-tight wrap-anywhere sm:text-2xl">{shop.name}</h2>
+      <section aria-label="Thông tin shop" className={sellerCard}>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3.5 sm:items-center">
+            <span aria-hidden="true" className="grid size-13 shrink-0 place-items-center rounded-lg bg-[linear-gradient(135deg,var(--seller-accent),var(--seller-avatar-end))] text-lg font-bold text-white shadow-sm">
+              <SellerInitials name={shop.name} />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-base font-bold leading-tight wrap-anywhere">{shop.name}</h2>
+              <dl className="mt-1.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-1.5 text-[13px] leading-5 text-slate-500 sm:flex sm:flex-wrap sm:gap-x-5 dark:text-slate-400">
+                <div className="col-span-2 grid min-w-0 grid-cols-subgrid items-start sm:flex sm:gap-1.5">
+                  <dt className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+                    <SellerIcon name="location" className="size-4 text-slate-400" />
+                    Nơi bán:
+                  </dt>
+                  <dd className="min-w-0 font-medium text-slate-700 wrap-anywhere dark:text-slate-200">{shop.province.name}</dd>
+                </div>
+                <div className="col-span-2 grid min-w-0 grid-cols-subgrid items-start sm:flex sm:gap-1.5">
+                  <dt className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+                    <SellerIcon name="calendar" className="size-4 text-slate-400" />
+                    Mở shop từ:
+                  </dt>
+                  <dd className="min-w-0 font-medium text-slate-700 dark:text-slate-200">
+                    <time dateTime={shop.created_at}>{shopDate.format(new Date(shop.created_at))}</time>
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          </div>
           {!editing && (
-            <button type="button" className={orderSecondary} onClick={() => { setNotice(undefined); setEditing(true) }}>
+            <button
+              type="button"
+              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-[13px] font-medium text-slate-700 shadow-xs transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--seller-accent) dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              onClick={() => { setNotice(undefined); setEditing(true) }}
+            >
+              <SellerIcon name="edit" className="size-4 text-slate-500" />
               Chỉnh sửa thông tin
             </button>
           )}
         </div>
-        <dl className="mt-5 grid gap-4 border-t border-zinc-200 pt-5 text-sm sm:grid-cols-2 dark:border-zinc-800">
-          <div>
-            <dt className="text-zinc-500 dark:text-zinc-400">Nơi bán</dt>
-            <dd className="mt-1 font-medium">{shop.province.name}</dd>
-          </div>
-          <div>
-            <dt className="text-zinc-500 dark:text-zinc-400">Mở shop từ</dt>
-            <dd className="mt-1 font-medium">
-              <time dateTime={shop.created_at}>{shopDate.format(new Date(shop.created_at))}</time>
-            </dd>
-          </div>
-        </dl>
         {editing && (
           <ShopEditor
             shop={shop}
@@ -108,7 +124,28 @@ function ShopOverview() {
           />
         )}
       </section>
-      <ShopStatsPanel />
+      <ShopStatsPanel onLoaded={onStatsLoaded} />
+    </>
+  )
+}
+
+function SellerDashboard() {
+  const [statsUpdatedAt, setStatsUpdatedAt] = useState<Date>()
+  return (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
+        <div>
+          <h1 className="text-[22px] font-bold leading-snug tracking-tight sm:text-2xl">Tổng quan gian hàng</h1>
+          <p className="mt-1 text-[13px] leading-relaxed text-slate-500 dark:text-slate-400">Theo dõi đơn hàng và doanh thu của gian hàng.</p>
+        </div>
+        {statsUpdatedAt && (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/60 bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            <span aria-hidden="true" className="size-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
+            <span>Cập nhật lúc <time dateTime={statsUpdatedAt.toISOString()}>{updateTime.format(statsUpdatedAt)}</time></span>
+          </span>
+        )}
+      </div>
+      <ShopOverview onStatsLoaded={setStatsUpdatedAt} />
     </>
   )
 }
@@ -118,8 +155,7 @@ export default function SellerShopPage() {
   if (!user) return null
   return (
     <AppShell>
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Tổng quan</h1>
-      <ShopOverview key={user.id} />
+      <SellerDashboard key={user.id} />
     </AppShell>
   )
 }

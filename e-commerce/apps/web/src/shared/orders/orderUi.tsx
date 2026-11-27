@@ -14,7 +14,12 @@ export const orderSecondary = 'inline-flex min-h-11 items-center justify-center 
 export const orderMoney = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' })
 export const orderDate = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' })
 
-export function OrderBadge({ status }: { status: OrderStatus }) {
+export function OrderBadge({ status, indicator = false }: { status: OrderStatus; indicator?: boolean }) {
   const { label, style } = statuses[status]
-  return <span className={`inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${style}`}>{label}</span>
+  return (
+    <span className={`inline-flex w-fit items-center gap-1.5 text-xs ${indicator ? 'rounded-md px-2 py-0.5 font-medium ring-1 ring-current/15 ring-inset' : 'rounded-full px-2.5 py-1 font-semibold'} ${style}`}>
+      {indicator && <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-current" />}
+      {label}
+    </span>
+  )
 }
