@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Link, matchPath, NavLink, useLocation } from 'react-router-dom'
 import { SellerIcon, SellerInitials } from '../../seller/sellerUi'
 import type { User } from '../api/client'
-import { BRAND } from '../auth/components/AuthLayout'
+import { BRAND } from '../brand'
 
 const sellerNav = [
   { to: '/seller', label: 'Tổng quan', icon: 'overview', end: true },

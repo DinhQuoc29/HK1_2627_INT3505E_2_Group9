@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { api, type CatalogCategoryGroup, type Province } from '../../shared/api/client'
 import { Alert, SelectField, Spinner, TextField } from '../../shared/auth/components/ui'
 import { buyerErrorMessage, useBuyerRequest } from '../useBuyerRequest'
@@ -9,7 +9,8 @@ const filterKeys = ['category', 'brand', 'province_code', 'min_price', 'max_pric
 type Filters = Record<(typeof filterKeys)[number], string>
 
 export function CatalogFilters({ params, apply }: { params: URLSearchParams; apply: (next: URLSearchParams) => void }) {
-  const [expanded, setExpanded] = useState(false)
+  const { hash } = useLocation()
+  const [expanded, setExpanded] = useState(hash === '#catalog-filters')
   const filters: Filters = {
     category: params.get('category') ?? '',
     brand: params.get('brand') ?? '',
@@ -24,9 +25,9 @@ export function CatalogFilters({ params, apply }: { params: URLSearchParams; app
   const reset = query ? `/products?${new URLSearchParams({ q: query })}` : '/products'
 
   return (
-    <aside aria-labelledby="catalog-filters" className="min-w-0 self-start rounded-2xl border border-zinc-200 bg-white px-3 py-2 sm:px-5 lg:py-4 dark:border-zinc-800 dark:bg-zinc-900">
+    <aside id="catalog-filters" aria-labelledby="catalog-filters-title" className="min-w-0 self-start scroll-mt-32 rounded-2xl border border-zinc-200 bg-white px-3 py-2 sm:px-5 md:scroll-mt-24 lg:py-4 dark:border-zinc-800 dark:bg-zinc-900">
       <div className="flex flex-wrap items-center justify-between gap-x-2">
-        <h2 id="catalog-filters" className="px-1 text-base font-bold lg:text-lg">
+        <h2 id="catalog-filters-title" className="px-1 text-base font-bold lg:text-lg">
           Bộ lọc {activeCount > 0 && <span className="text-sm font-medium text-zinc-500">({activeCount})</span>}
         </h2>
         <div className="flex flex-wrap items-center">

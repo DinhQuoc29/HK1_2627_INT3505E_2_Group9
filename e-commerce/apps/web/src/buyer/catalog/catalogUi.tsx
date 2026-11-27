@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 export const productPrice = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' })
 
-export function ProductPhoto({ url, alt, lazy = false }: { url: string | null; alt: string; lazy?: boolean }) {
+export function ProductPhoto({ url, alt, lazy = false, cover = false }: { url: string | null; alt: string; lazy?: boolean; cover?: boolean }) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null)
   if (!url || url === failedUrl) {
     return <div className="grid h-full w-full place-items-center p-2 text-center text-xs text-zinc-500">Không có ảnh</div>
@@ -14,7 +14,7 @@ export function ProductPhoto({ url, alt, lazy = false }: { url: string | null; a
       loading={lazy ? 'lazy' : undefined}
       referrerPolicy="no-referrer"
       onError={() => setFailedUrl(url)}
-      className="h-full w-full object-contain"
+      className={`h-full w-full ${cover ? 'object-cover transition-transform duration-300 group-hover:scale-105' : 'object-contain'}`}
     />
   )
 }

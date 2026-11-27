@@ -1,9 +1,9 @@
 @import 'tailwindcss';
 
-/* The shared seller navigation and reference pages use the light palette. */
+/* The reference pages use the light palette. */
 @custom-variant dark {
   @media (prefers-color-scheme: dark) {
-    &:where(:not(.seller-reference, .seller-reference *)) {
+    &:where(:not(.seller-reference, .seller-reference *, .store-home, .store-home *)) {
       @slot;
     }
   }
@@ -25,6 +25,34 @@ html, body, #root { height: 100%; }
 
 body {
   @apply bg-white text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+}
+
+.buyer-store {
+  --store-primary: #b32007;
+  --store-primary-hover: #d73b20;
+  --store-ink: #121c2a;
+  --store-muted: #5b403b;
+  --store-soft: #eff4ff;
+  --store-soft-hover: #e6eeff;
+  --store-outline: #f2dfdb;
+}
+
+.store-home,
+.store-chrome {
+  color: var(--store-ink);
+  color-scheme: light;
+  font-family: 'Be Vietnam Pro', var(--font-sans);
+}
+
+.store-home { background-color: #f8f9ff; }
+
+.store-chrome { font-size: 0.875rem; }
+
+.store-account-trigger::-webkit-details-marker { display: none; }
+
+:where(.store-home, .store-chrome) :where(a, button, summary):focus-visible {
+  outline: 2px solid var(--store-primary);
+  outline-offset: 3px;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,134 +1,256 @@
+import { useCallback, useEffect, useState, type ComponentProps, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../shared/api/client'
-import { useAuth } from '../shared/auth/AuthContext'
+import { api, type CatalogProductCard, type CatalogProductPage } from '../shared/api/client'
 import { BuyerStoreLayout } from '../shared/layout/BuyerStoreLayout'
+import { StoreIcon } from '../shared/layout/StoreIcon'
 import { BuyerEmptyState, BuyerLoading, BuyerRequestError } from './BuyerFeedback'
+import { ProductPhoto, productPrice } from './catalog/catalogUi'
 import { useBuyerRequest } from './useBuyerRequest'
 
-const benefits = [
-  { icon: '◎', title: 'Nhiều lựa chọn', description: 'Khám phá sản phẩm từ nhiều shop trong cùng một nơi.' },
-  { icon: '₫', title: 'Chọn theo ngân sách', description: 'Tìm món phù hợp với mức giá bạn đang cân nhắc.' },
-  { icon: '↗', title: 'Theo dõi đơn hàng', description: 'Xem tiến trình của từng shop sau khi đặt mua.' },
+const categoryIcons = new Map<string, ComponentProps<typeof StoreIcon>['name']>([
+  ['giay-dep', 'shoe'],
+  ['trang-tri-nha-cua', 'chair'],
+  ['tui-va-phu-kien', 'watch'],
+  ['thoi-trang', 'shirt'],
+  ['dien-tu', 'headphones'],
+  ['cham-soc-ca-nhan', 'leaf'],
+  ['sach-va-van-phong-pham', 'book'],
+  ['nha-cua-va-doi-song', 'chair'],
+])
+
+const budgetRanges = [
+  { label: 'Tất cả' },
+  { label: 'Dưới 200.000 ₫', max: '199999' },
+  { label: '200.000 ₫ – 500.000 ₫', min: '200000', max: '500000' },
+  { label: 'Trên 500.000 ₫', min: '500001' },
 ]
 
+const cardsPerSection = 4
+const favoritesKey = 'e-market:favorite-products'
+const loadHomeProducts = () => api.catalogProducts(new URLSearchParams({ limit: String(cardsPerSection * 2) }))
+const sectionLinkClass = 'inline-flex shrink-0 items-center gap-1 rounded-sm py-1 text-sm font-semibold text-(--store-primary) hover:text-(--store-primary-hover)'
+const productGridClass = 'grid grid-cols-2 gap-3 sm:gap-6 md:grid-cols-3 lg:grid-cols-4'
+
 export default function BuyerHomePage() {
-  const { status } = useAuth()
   return (
-    <BuyerStoreLayout>
-      <div className="mx-auto max-w-7xl space-y-12 px-4 py-7 sm:px-6 sm:py-10 lg:space-y-16">
-        <section className="relative isolate overflow-hidden rounded-[2rem] bg-gradient-to-br from-orange-50 via-rose-50 to-amber-100 px-5 py-8 dark:from-zinc-900 dark:via-zinc-900 dark:to-brand-900/50 sm:px-10 sm:py-14 lg:grid lg:min-h-[25rem] lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:px-14">
-          <div className="pointer-events-none absolute -right-28 -top-32 -z-10 size-[28rem] rounded-full bg-white/70 blur-3xl dark:bg-brand-500/10" aria-hidden />
-          <div className="pointer-events-none absolute -bottom-40 left-1/3 -z-10 size-80 rounded-full bg-brand-300/30 blur-3xl" aria-hidden />
-          <div className="relative z-10 max-w-2xl">
-            <p className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white/80 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-brand-700 dark:border-brand-800 dark:bg-zinc-950/50 dark:text-brand-100">
-              <span className="size-1.5 rounded-full bg-brand-500" aria-hidden />
-              Chào mừng đến E-Market
+    <BuyerStoreLayout home>
+      <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:py-10 lg:px-8">
+        <section className="grid overflow-hidden rounded-xl bg-white shadow-xs lg:min-h-[520px] lg:grid-cols-[5fr_7fr]" aria-labelledby="store-hero-title">
+          <div className="flex flex-col items-start justify-center gap-6 px-6 py-9 sm:p-10 lg:p-12">
+            <p className="flex items-center gap-2 text-xs font-semibold tracking-[.12em] text-(--store-primary) uppercase">
+              <span className="h-0.5 w-6 bg-current" aria-hidden="true" /> E-Market Curated
             </p>
-            <h1 className="mt-4 text-3xl font-bold leading-[1.08] tracking-tight text-zinc-950 sm:mt-5 sm:text-5xl lg:text-[3.5rem] dark:text-white">
-              Món bạn cần,<br />dễ tìm hơn mỗi ngày.
+            <h1 id="store-hero-title" className="max-w-xl text-[32px] leading-[1.16] font-extrabold tracking-tight lg:text-5xl lg:leading-[1.17]">
+              Mua sắm thông minh, đúng thứ bạn cần.
             </h1>
-            <p className="mt-5 max-w-xl text-base leading-7 text-zinc-600 dark:text-zinc-300 sm:text-lg">
-              Khám phá sản phẩm từ nhiều shop, tìm lựa chọn hợp ngân sách và quản lý đơn hàng thuận tiện.
+            <p className="max-w-md text-base leading-6 text-(--store-muted)">
+              Khám phá sản phẩm phù hợp với phong cách và ngân sách của bạn.
             </p>
-            <div className="mt-7 flex flex-wrap gap-3">
-              <Link to="/products" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 font-semibold text-white shadow-lg shadow-brand-600/20 transition hover:-translate-y-0.5 hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">
-                Khám phá sản phẩm
-                <span aria-hidden>→</span>
-              </Link>
-              {status === 'anonymous' && (
-                <Link to="/register" className="inline-flex min-h-12 items-center justify-center rounded-xl border border-zinc-300 bg-white/70 px-5 font-semibold text-zinc-800 transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:border-zinc-700 dark:bg-zinc-950/40 dark:text-white dark:hover:bg-zinc-900">
-                  Tạo tài khoản
-                </Link>
-              )}
-            </div>
-            <div className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-xs font-medium text-zinc-600 dark:text-zinc-300 sm:text-sm">
-              <span className="inline-flex items-center gap-2"><span className="text-brand-600" aria-hidden>✓</span> Giỏ hàng nhiều shop</span>
-              <span className="inline-flex items-center gap-2"><span className="text-brand-600" aria-hidden>✓</span> Thanh toán mô phỏng an toàn</span>
+            <div className="flex flex-wrap gap-2 pt-2 text-sm font-semibold sm:gap-4">
+              <a href="#san-pham-noi-bat" className="inline-flex min-h-12 items-center gap-2 rounded-lg bg-(--store-primary) px-3.5 text-white shadow-sm transition-colors hover:bg-(--store-primary-hover) sm:px-6">
+                Khám phá ngay <StoreIcon name="arrow" className="size-[18px]" />
+              </a>
+              <a href="#danh-muc" className="inline-flex min-h-12 items-center rounded-lg bg-(--store-soft) px-3.5 transition-colors hover:bg-(--store-soft-hover) sm:px-5">
+                Xem danh mục
+              </a>
             </div>
           </div>
-
-          <div className="relative mx-auto mt-10 hidden h-64 w-full max-w-md sm:block lg:mt-0" aria-hidden>
-            <div className="absolute left-1/2 top-1/2 grid size-52 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 shadow-2xl shadow-brand-700/25 sm:size-60">
-              <div className="grid size-36 place-items-center rounded-[2rem] border border-white/30 bg-white/15 text-7xl text-white shadow-inner sm:size-40">
-                <svg viewBox="0 0 80 80" className="size-24 sm:size-28" fill="none" aria-hidden>
-                  <path d="M14 29h52l-5 37H19l-5-37Z" fill="currentColor" fillOpacity=".96" />
-                  <path d="M27 31v-7a13 13 0 0 1 26 0v7" stroke="white" strokeWidth="4" strokeLinecap="round" />
-                  <path d="M28 44h24" stroke="#E8472B" strokeWidth="4" strokeLinecap="round" />
-                </svg>
-              </div>
-            </div>
-            <div className="absolute left-0 top-7 rounded-2xl border border-white/80 bg-white/90 p-4 shadow-xl shadow-orange-900/10 backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/90">
-              <span className="grid size-10 place-items-center rounded-xl bg-sky-100 text-lg text-sky-700 dark:bg-sky-950 dark:text-sky-300" aria-hidden>⌁</span>
-              <p className="mt-3 text-xs font-medium text-zinc-500">Khám phá mỗi ngày</p>
-              <p className="text-sm font-bold text-zinc-900 dark:text-white">Nhiều lựa chọn</p>
-            </div>
-            <div className="absolute bottom-5 right-0 rounded-2xl border border-white/80 bg-white/90 p-4 shadow-xl shadow-orange-900/10 backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/90">
-              <span className="grid size-10 place-items-center rounded-xl bg-emerald-100 text-lg text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" aria-hidden>✓</span>
-              <p className="mt-3 text-xs font-medium text-zinc-500">Mua sắm thuận tiện</p>
-              <p className="text-sm font-bold text-zinc-900 dark:text-white">Từ nhiều shop</p>
-            </div>
-            <span className="absolute right-12 top-3 grid size-11 place-items-center rounded-full bg-amber-300 text-xl text-amber-900 shadow-lg" aria-hidden>✦</span>
-            <span className="absolute bottom-4 left-12 grid size-9 place-items-center rounded-full bg-rose-200 text-rose-800 shadow-lg" aria-hidden>✧</span>
+          <div className="relative h-[clamp(13rem,50vw,20rem)] overflow-hidden lg:h-full lg:min-h-[520px]">
+            <img
+              src="/login-marketplace.png"
+              alt="Bộ sưu tập giày sneaker, tai nghe, túi xách và phụ kiện E-Market"
+              width={1200}
+              height={896}
+              fetchPriority="high"
+              className="absolute inset-0 size-full object-cover"
+            />
+            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-linear-to-b from-white to-transparent lg:inset-y-0 lg:right-auto lg:h-auto lg:w-24 lg:bg-linear-to-r" />
           </div>
         </section>
 
-        <section aria-labelledby="buyer-categories">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-brand-600">Bắt đầu từ điều bạn thích</p>
-              <h2 id="buyer-categories" className="mt-1 text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">Khám phá danh mục</h2>
-            </div>
-            <Link to="/products" className="text-sm font-semibold text-brand-700 hover:underline dark:text-brand-100">Xem tất cả sản phẩm <span aria-hidden>→</span></Link>
-          </div>
+        <section id="danh-muc" aria-labelledby="buyer-categories" className="mt-10 scroll-mt-32 md:scroll-mt-24 lg:mt-14">
+          <SectionHeading id="buyer-categories" label="Danh mục" title="Khám phá danh mục">
+            <Link to="/products#catalog-filters" className={sectionLinkClass}>
+              Tất cả danh mục <StoreIcon name="chevron" className="size-[18px]" />
+            </Link>
+          </SectionHeading>
           <HomeCategories />
         </section>
 
-        <section aria-labelledby="buyer-benefits" className="rounded-3xl border border-zinc-200 bg-white p-5 sm:p-8 dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="max-w-2xl">
-            <p className="text-sm font-semibold text-brand-600">Mua sắm dễ dàng hơn</p>
-            <h2 id="buyer-benefits" className="mt-1 text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">Mọi thứ bạn cần, trong một trải nghiệm</h2>
-          </div>
-          <div className="mt-6 grid gap-5 md:grid-cols-3">
-            {benefits.map((benefit) => (
-              <article key={benefit.title} className="flex gap-4 rounded-2xl bg-zinc-50 p-4 dark:bg-zinc-950">
-                <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand-100 text-lg font-bold text-brand-700 dark:bg-brand-900/50 dark:text-brand-100" aria-hidden>{benefit.icon}</span>
-                <div>
-                  <h3 className="font-semibold text-zinc-900 dark:text-white">{benefit.title}</h3>
-                  <p className="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-400">{benefit.description}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
+        <HomeProducts />
       </div>
     </BuyerStoreLayout>
   )
 }
 
+function SectionHeading({ id, label, title, children }: { id: string; label: string; title: string; children: ReactNode }) {
+  return (
+    <div className="mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-3 sm:mb-6">
+      <div>
+        <p className="mb-1 text-xs font-semibold tracking-[.12em] text-(--store-muted) uppercase">{label}</p>
+        <h2 id={id} className="text-xl leading-8 font-semibold tracking-tight sm:text-2xl">{title}</h2>
+      </div>
+      {children}
+    </div>
+  )
+}
+
 function HomeCategories() {
   const { state, retry } = useBuyerRequest(api.catalogCategories)
+  if (state.status === 'loading') return <BuyerLoading label="Đang tải danh mục…" />
+  if (state.status === 'error') return <BuyerRequestError message="Không tải được danh mục." retry={retry} />
+  if (!state.data.length) return <BuyerEmptyState title="Chưa có danh mục sản phẩm" />
+
+  const allCategories = state.data.flatMap((category) => [category, ...category.children])
+  const categories = new Map(allCategories.map((category) => [category.slug, category]))
+  const selected = [...new Set([...categoryIcons.keys(), ...categories.keys()])].flatMap((slug) => {
+    const category = categories.get(slug)
+    return category ? [category] : []
+  }).slice(0, 6)
 
   return (
-    <div className="mt-5">
-      {state.status === 'loading' && <BuyerLoading label="Đang tải danh mục…" />}
-      {state.status === 'error' && <BuyerRequestError message="Không tải được danh mục." retry={retry} />}
-      {state.status === 'ready' && (
-        state.data.length ? (
-          <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {state.data.map((category) => (
-              <li key={category.slug}>
-                <Link
-                  to={`/products?${new URLSearchParams({ category: category.slug })}`}
-                  className="group flex h-full min-h-20 items-center justify-between gap-2 rounded-2xl border border-zinc-200 bg-white p-4 font-semibold transition hover:border-brand-500 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 dark:border-zinc-800 dark:bg-zinc-900"
-                >
-                  <span className="min-w-0 break-words">{category.name}</span>
-                  <span className="shrink-0 text-zinc-400 group-hover:text-brand-600" aria-hidden>→</span>
-                </Link>
-              </li>
+    <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-6">
+      {selected.map(({ slug, name }) => (
+        <li key={slug} className="min-w-0">
+          <Link to={`/products?${new URLSearchParams({ category: slug })}`} className="group flex h-full min-h-32 flex-col items-center justify-center gap-2 rounded-xl bg-white p-4 text-center text-sm font-semibold shadow-xs transition hover:-translate-y-0.5 hover:shadow-md sm:min-h-44 sm:p-6 sm:text-base">
+            <span className="grid size-12 place-items-center rounded-full bg-(--store-soft) transition-colors group-hover:bg-(--store-primary) group-hover:text-white">
+              <StoreIcon name={categoryIcons.get(slug) ?? 'grid'} />
+            </span>
+            <span className="wrap-anywhere">{name}</span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function HomeProducts() {
+  const request = useBuyerRequest(loadHomeProducts)
+  const [range, setRange] = useState(budgetRanges[0])
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem(favoritesKey) ?? '[]')
+      return Array.isArray(saved) ? saved.filter((value): value is string => typeof value === 'string') : []
+    } catch {
+      return []
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(favoritesKey, JSON.stringify(favorites))
+    } catch {
+      // Keep the current selection when the browser restricts local storage.
+    }
+  }, [favorites])
+
+  function toggleFavorite(id: string) {
+    setFavorites((saved) => saved.includes(id) ? saved.filter((item) => item !== id) : [...saved, id])
+  }
+
+  return (
+    <>
+      <section id="san-pham-noi-bat" aria-labelledby="buyer-featured" className="mt-12 scroll-mt-32 md:scroll-mt-24 lg:mt-16">
+        <SectionHeading id="buyer-featured" label="Tuyển chọn" title="Sản phẩm nổi bật">
+          <Link to="/products" className={sectionLinkClass}>Xem tất cả <StoreIcon name="chevron" className="size-[18px]" /></Link>
+        </SectionHeading>
+        <HomeProductResults request={request} emptyTitle="Chưa có sản phẩm nổi bật">
+          {(items) => (
+            <ul className={productGridClass}>
+              {items.slice(0, cardsPerSection).map((product) => (
+                <HomeProductCard key={product.id} product={product} favorite={favorites.includes(product.id)} onFavorite={() => toggleFavorite(product.id)} />
+              ))}
+            </ul>
+          )}
+        </HomeProductResults>
+      </section>
+
+      <section aria-labelledby="buyer-budget" className="mt-12 lg:mt-16">
+        <SectionHeading id="buyer-budget" label="Gợi ý cho bạn" title="Sản phẩm phù hợp ngân sách">
+          <div role="group" aria-label="Khoảng giá" className="flex flex-wrap gap-2">
+            {budgetRanges.map((option) => (
+              <button
+                type="button"
+                key={option.label}
+                onClick={() => setRange(option)}
+                aria-pressed={range === option}
+                className="min-h-9 cursor-pointer rounded-full bg-(--store-soft) px-4 py-1.5 text-xs font-semibold text-(--store-muted) transition-colors hover:bg-(--store-soft-hover) aria-pressed:bg-(--store-primary) aria-pressed:text-white sm:min-h-7"
+              >
+                {option.label}
+              </button>
             ))}
-          </ul>
-        ) : <BuyerEmptyState title="Chưa có danh mục sản phẩm" />
+          </div>
+        </SectionHeading>
+
+        {range === budgetRanges[0] ? (
+          <HomeProductResults request={request} emptyTitle="Chưa có sản phẩm để gợi ý">
+            {(items) => {
+              const suggestions = items.slice(cardsPerSection)
+              const remaining = cardsPerSection - suggestions.length
+              return <BudgetProductGrid items={[...suggestions, ...items.slice(0, remaining)]} />
+            }}
+          </HomeProductResults>
+        ) : <FilteredBudgetProducts key={range.label} range={range} />}
+      </section>
+    </>
+  )
+}
+
+function FilteredBudgetProducts({ range }: { range: (typeof budgetRanges)[number] }) {
+  const load = useCallback(() => {
+    const params = new URLSearchParams({ limit: String(cardsPerSection) })
+    if (range.min) params.set('min_price', range.min)
+    if (range.max) params.set('max_price', range.max)
+    return api.catalogProducts(params)
+  }, [range])
+  const request = useBuyerRequest(load)
+  return (
+    <HomeProductResults request={request} emptyTitle="Chưa có sản phẩm trong khoảng giá này">
+      {(items) => <BudgetProductGrid items={items} />}
+    </HomeProductResults>
+  )
+}
+
+function HomeProductResults({ request, emptyTitle, children }: {
+  request: ReturnType<typeof useBuyerRequest<CatalogProductPage>>
+  emptyTitle: string
+  children: (items: CatalogProductCard[]) => ReactNode
+}) {
+  const { state, retry } = request
+  if (state.status === 'loading') return <BuyerLoading label="Đang tải sản phẩm…" />
+  if (state.status === 'error') return <BuyerRequestError message="Không tải được sản phẩm." retry={retry} />
+  return state.data.items.length ? children(state.data.items) : <BuyerEmptyState title={emptyTitle} />
+}
+
+function BudgetProductGrid({ items }: { items: CatalogProductCard[] }) {
+  return <ul className={productGridClass}>{items.map((product) => <HomeProductCard key={product.id} product={product} />)}</ul>
+}
+
+function HomeProductCard({ product, favorite, onFavorite }: { product: CatalogProductCard; favorite?: boolean; onFavorite?: () => void }) {
+  return (
+    <li className="group relative min-w-0 rounded-xl bg-white p-3 shadow-xs transition-shadow hover:shadow-md sm:p-4">
+      <Link to={`/products/${product.id}`} className="flex h-full min-w-0 flex-col rounded-lg">
+        <div className="mb-3 aspect-square overflow-hidden rounded-lg bg-(--store-soft) sm:mb-4">
+          <ProductPhoto url={product.image_url} alt="" lazy cover />
+        </div>
+        <p className="truncate text-xs text-(--store-muted)">{product.shop.name}</p>
+        <h3 className="mt-0.5 line-clamp-2 min-h-10 text-sm leading-5 font-semibold wrap-anywhere sm:min-h-12 sm:text-base sm:leading-6">{product.name}</h3>
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 pt-2">
+          <p className="text-base leading-6 font-semibold wrap-anywhere tabular-nums sm:text-xl sm:leading-7">{productPrice.format(product.price)}</p>
+          <p className="text-xs text-(--store-muted)">{product.in_stock ? 'Còn hàng' : 'Hết hàng'}</p>
+        </div>
+      </Link>
+      {onFavorite && (
+        <button
+          type="button"
+          aria-label={`Yêu thích ${product.name}`}
+          aria-pressed={favorite}
+          onClick={onFavorite}
+          className="absolute top-5 right-5 grid size-8 cursor-pointer place-items-center rounded-full bg-white/95 text-(--store-muted) shadow-xs transition-colors hover:text-(--store-primary) aria-pressed:text-(--store-primary) sm:top-7 sm:right-7"
+        >
+          <StoreIcon name="heart" className="size-[18px]" filled={favorite} />
+        </button>
       )}
-    </div>
+    </li>
   )
 }

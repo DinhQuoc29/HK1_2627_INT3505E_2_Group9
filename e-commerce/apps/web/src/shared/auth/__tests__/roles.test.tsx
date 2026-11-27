@@ -43,7 +43,7 @@ describe('điều hướng theo vai trò sau đăng nhập', () => {
   it('buyer vào trang mua sắm', async () => {
     setup({ restore: null, login: 'buyer', route: () => undefined })
     await signIn()
-    expect(await screen.findByRole('heading', { name: /Món bạn cần/ })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Mua sắm thông minh, đúng thứ bạn cần.' })).toBeInTheDocument()
   })
 
   it('seller vào /seller', async () => {

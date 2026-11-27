@@ -1,22 +1,5 @@
 import type { ReactNode } from 'react'
-
-export const BRAND = 'E-Market'
-
-export function Logo({ light = false, variant = 'default' }: { light?: boolean; variant?: 'default' | 'auth' }) {
-  return (
-    <div className={`flex w-fit max-w-full shrink-0 items-center rounded-lg ${light ? 'bg-white' : ''}`}>
-      <img
-        src="/logo.png"
-        alt={BRAND}
-        width={2172}
-        height={724}
-        className={variant === 'auth'
-          ? 'block h-auto w-48 max-w-full sm:w-56'
-          : 'block h-auto w-40 max-w-full rounded-lg dark:bg-white'}
-      />
-    </div>
-  )
-}
+import { BRAND, Logo } from '../../brand'
 
 const perks = [
   'Gợi ý sản phẩm hợp ngân sách của bạn',

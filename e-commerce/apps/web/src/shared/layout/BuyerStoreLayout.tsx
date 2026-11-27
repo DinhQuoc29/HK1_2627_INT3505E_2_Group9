@@ -1,28 +1,37 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { Link, matchPath, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { Link, matchPath, useLocation, useNavigate } from 'react-router-dom'
+import { useBuyerRequest } from '../../buyer/useBuyerRequest'
+import { api, type User } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
-import { Logo } from '../auth/components/AuthLayout'
 import { homeFor, roleLabel } from '../auth/roles'
+import { BRAND, Logo } from '../brand'
+import { StoreIcon } from './StoreIcon'
 
-const buyerLinks = [
-  { to: '/', label: 'Trang chủ', end: true },
-  { to: '/products', label: 'Sản phẩm', end: false },
-  { to: '/cart', label: 'Giỏ hàng', end: true, buyerOnly: true },
-  { to: '/orders', label: 'Đơn mua', end: false, buyerOnly: true },
-  { to: '/account', label: 'Tài khoản', end: true, signedInOnly: true },
+const storeLinks = [
+  { to: '/', label: 'Trang chủ' },
+  { to: '/products', label: 'Sản phẩm' },
+  { to: '/#danh-muc', label: 'Danh mục' },
 ] as const
 
-export function BuyerStoreLayout({ children }: { children: ReactNode }) {
+const wrapper = 'mx-auto w-full max-w-7xl px-4 lg:px-8'
+const textLink = 'rounded-sm py-2 transition-colors hover:text-(--store-primary)'
+const accountItem = 'block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-(--store-soft) hover:text-(--store-primary)'
+
+export function BuyerStoreLayout({ children, home = false }: { children: ReactNode; home?: boolean }) {
   const { status, user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(() => new URLSearchParams(location.search).get('q') ?? '')
 
   useEffect(() => {
     setQuery(new URLSearchParams(location.search).get('q') ?? '')
   }, [location.pathname, location.search])
 
-  const search = (event: FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    if (location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView?.()
+  }, [location.key, location.hash])
+
+  function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const value = query.trim()
     const params = new URLSearchParams(matchPath('/products', location.pathname) ? location.search : '')
@@ -32,100 +41,133 @@ export function BuyerStoreLayout({ children }: { children: ReactNode }) {
     navigate(params.size ? `/products?${params}` : '/products')
   }
 
-  const visibleLinks = buyerLinks.filter((item) => {
-    if ('buyerOnly' in item && item.buyerOnly && user?.role !== 'buyer') return false
-    if ('signedInOnly' in item && item.signedInOnly && !user) return false
-    return true
-  })
-
   return (
-    <div className="flex min-h-full flex-col bg-zinc-50 dark:bg-zinc-950">
-      <a href="#buyer-main" className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-30 focus:rounded-xl focus:bg-white focus:px-4 focus:py-3 focus:text-brand-700">
+    <div className={`buyer-store flex min-h-full flex-col ${home ? 'store-home' : 'bg-zinc-50 dark:bg-zinc-950'}`}>
+      <a href="#buyer-main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-40 focus:rounded-lg focus:bg-white focus:px-4 focus:py-3 focus:text-(--store-primary)">
         Đến nội dung chính
       </a>
-      <header className="z-20 border-b border-zinc-200 bg-white/95 backdrop-blur md:sticky md:top-0 dark:border-zinc-800 dark:bg-zinc-900/95">
-        <div className="mx-auto max-w-7xl px-3 sm:px-6">
-          <div className="flex min-h-[4.5rem] flex-wrap items-center gap-2 py-3 sm:gap-3">
-            <Link to="/" aria-label="E-Market - Trang chủ" className="shrink-0">
-              <Logo />
-            </Link>
-
-            <form onSubmit={search} role="search" className="order-3 flex w-full min-w-0 md:order-none md:ml-4 md:flex-1">
-              <label htmlFor="store-search" className="sr-only">Tìm sản phẩm</label>
-              <div className="flex w-full overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100 dark:border-zinc-700 dark:bg-zinc-950 dark:focus-within:ring-brand-900">
-                <input
-                  id="store-search"
-                  name="q"
-                  type="search"
-                  maxLength={255}
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Tìm sản phẩm bạn cần"
-                  className="min-h-11 min-w-0 flex-1 bg-transparent px-4 text-sm outline-none placeholder:text-zinc-400"
-                />
-                <button type="submit" aria-label="Tìm kiếm" className="grid min-h-11 w-12 shrink-0 place-items-center bg-brand-600 text-white transition hover:bg-brand-700 focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-white">
-                  <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-                    <circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" />
-                  </svg>
-                </button>
-              </div>
-            </form>
-
-            <div className="ml-auto flex shrink-0 items-center gap-1 text-sm sm:gap-2" aria-busy={status === 'loading'}>
-              {status === 'loading' ? <div aria-hidden className="h-11 w-24" /> : user ? (
-                <>
-                  <Link to={user.role === 'buyer' ? '/account' : homeFor(user.role)} className="hidden max-w-36 truncate rounded-lg px-2 py-2 text-right hover:bg-zinc-100 sm:block dark:hover:bg-zinc-800">
-                    <span className="block max-w-36 truncate font-semibold">{user.full_name}</span>
-                    <span className="block text-xs text-zinc-500">{roleLabel[user.role]}</span>
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={async () => { await logout(); navigate('/login', { replace: true }) }}
-                    className="min-h-11 rounded-xl border border-zinc-300 px-3 font-medium transition hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                  >
-                    Đăng xuất
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Link to="/login" className="inline-flex min-h-11 items-center rounded-xl px-2 font-semibold text-zinc-700 transition hover:bg-zinc-100 sm:px-3 dark:text-zinc-200 dark:hover:bg-zinc-800">Đăng nhập</Link>
-                  <Link to="/register" className="inline-flex min-h-11 items-center rounded-xl bg-brand-600 px-2 font-semibold text-white transition hover:bg-brand-700 sm:px-3">Đăng ký</Link>
-                </>
-              )}
-            </div>
-          </div>
-
-          <nav aria-label="Điều hướng mua sắm" className="flex flex-wrap gap-x-1 pb-2 text-sm font-medium">
-            {visibleLinks.map(({ to, label, end }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={end}
-                className={({ isActive }) => [
-                  'flex min-h-11 shrink-0 items-center rounded-lg px-2 transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 sm:px-3',
-                  isActive
-                    ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/35 dark:text-brand-100'
-                    : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800',
-                ].join(' ')}
-              >
-                {label}
-              </NavLink>
+      <header className="store-chrome sticky top-0 z-30 border-b border-(--store-outline) bg-white/95 backdrop-blur-xl">
+        <div className={`${wrapper} flex min-h-16 flex-wrap items-center gap-x-4 gap-y-0 pb-3 sm:gap-x-6 md:flex-nowrap md:pb-0`}>
+          <Link to="/" aria-label={`${BRAND} - Trang chủ`} className="flex min-h-14 shrink-0 items-center rounded-sm">
+            <Logo />
+          </Link>
+          <nav aria-label="Điều hướng mua sắm" className="hidden shrink-0 items-center gap-6 pl-4 font-semibold text-(--store-muted) lg:flex">
+            {storeLinks.map(({ to, label }) => (
+              <Link key={to} to={to} aria-current={location.pathname + location.hash === to ? 'page' : undefined} className={textLink}>{label}</Link>
             ))}
-            {user?.role === 'buyer' && (
-              <Link to="/seller/register" className="flex min-h-11 shrink-0 items-center rounded-lg px-2 text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800 sm:ml-auto sm:px-3 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
-                Mở shop
-              </Link>
-            )}
           </nav>
+
+          <form onSubmit={search} role="search" className="order-last flex h-10 w-full min-w-0 items-stretch rounded-lg bg-(--store-soft) focus-within:ring-2 focus-within:ring-(--store-primary)/30 md:order-none md:max-w-xl md:flex-1">
+            <label htmlFor="store-search" className="sr-only">Tìm sản phẩm</label>
+            <button type="submit" aria-label="Tìm kiếm" className="grid w-10 shrink-0 cursor-pointer place-items-center rounded-l-lg text-(--store-muted) hover:text-(--store-primary)">
+              <StoreIcon name="search" className="size-5" />
+            </button>
+            <input
+              id="store-search"
+              name="q"
+              type="search"
+              maxLength={255}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Bạn đang tìm kiếm sản phẩm gì?"
+              className="min-w-0 flex-1 pr-3 text-base placeholder:text-(--store-muted) focus:outline-none sm:text-sm"
+            />
+          </form>
+
+          <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3" aria-busy={status === 'loading'}>
+            {home && user?.role === 'buyer' ? <CartWithCount key={user.id} /> : <CartLink />}
+            {status === 'anonymous' && (
+              <div className="hidden items-center gap-2 font-semibold text-(--store-muted) sm:flex">
+                <Link to="/login" className={textLink}>Đăng nhập</Link>
+                <span aria-hidden="true" className="text-[#8f706a]">/</span>
+                <Link to="/register" className={textLink}>Đăng ký</Link>
+              </div>
+            )}
+            {status !== 'loading' && <StoreAccount key={location.key} user={user} onLogout={async () => {
+              await logout().catch(() => undefined)
+              navigate('/login', { replace: true })
+            }} />}
+          </div>
         </div>
       </header>
-      <main id="buyer-main" tabIndex={-1} className="min-w-0 flex-1 md:scroll-mt-36">{children}</main>
-      <footer className="mt-12 border-t border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-xs text-zinc-500 sm:px-6">
-          <span>© {new Date().getFullYear()} E-Market</span>
-          <span>Mua sắm thuận tiện từ nhiều shop</span>
+
+      <main id="buyer-main" tabIndex={-1} className="min-w-0 flex-1 scroll-mt-32 md:scroll-mt-20">{children}</main>
+
+      <footer className={`store-chrome border-t border-(--store-outline) bg-white py-10 ${home ? '' : 'mt-12'}`}>
+        <div className={`${wrapper} flex flex-col items-center justify-between gap-4 md:flex-row`}>
+          <Link to="/" aria-label={`${BRAND} - Trang chủ`} className="flex shrink-0 items-center rounded-sm"><Logo variant="compact" /></Link>
+          <nav aria-label="Điều hướng chân trang" className="flex flex-wrap items-center justify-center gap-x-6 text-(--store-muted)">
+            {storeLinks.map(({ to, label }) => <Link key={to} to={to} className={textLink}>{label}</Link>)}
+            <Link to="/account" className={textLink}>Tài khoản</Link>
+          </nav>
+          <p className="text-center text-xs text-(--store-muted)">© {new Date().getFullYear()} {BRAND} Vietnam. Bảo lưu mọi quyền.</p>
         </div>
       </footer>
     </div>
+  )
+}
+
+function CartWithCount() {
+  const { state } = useBuyerRequest(api.cart)
+  const count = state.status === 'ready'
+    ? state.data.groups.reduce((total, { items }) => total + items.reduce((sum, item) => sum + item.quantity, 0), 0)
+    : 0
+  return <CartLink count={count} />
+}
+
+function CartLink({ count = 0 }: { count?: number }) {
+  return (
+    <Link to="/cart" aria-label={count ? `Giỏ hàng, ${count} sản phẩm` : 'Giỏ hàng'} className="relative grid size-10 place-items-center rounded-lg text-(--store-muted) transition-colors hover:bg-(--store-soft) hover:text-(--store-ink)">
+      <StoreIcon name="cart" className="size-[22px]" />
+      {count > 0 && <span aria-hidden="true" className="absolute top-0 right-0 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-(--store-primary) px-1 text-[11px] font-semibold leading-none text-white">{count > 99 ? '99+' : count}</span>}
+    </Link>
+  )
+}
+
+function StoreAccount({ user, onLogout }: { user: User | null; onLogout: () => Promise<void> }) {
+  const details = useRef<HTMLDetailsElement>(null)
+  const summary = useRef<HTMLElement>(null)
+
+  return (
+    <details
+      ref={details}
+      className="relative"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && event.currentTarget.open) {
+          event.currentTarget.open = false
+          summary.current?.focus()
+        }
+      }}
+    >
+      <summary ref={summary} aria-label="Tài khoản" className="store-account-trigger grid size-10 cursor-pointer list-none place-items-center rounded-full">
+        <span className="grid size-8 place-items-center rounded-full bg-(--store-primary) text-white"><StoreIcon name="person" className="size-[18px]" /></span>
+      </summary>
+      <div className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-(--store-outline) bg-white p-2 shadow-lg" onClick={() => { if (details.current) details.current.open = false }}>
+        {user ? (
+          <>
+            <div className="mb-1 border-b border-(--store-outline) px-3 pt-2 pb-3">
+              <p className="truncate font-semibold">{user.full_name}</p>
+              <p className="text-xs text-(--store-muted)">{roleLabel[user.role]}</p>
+            </div>
+            <Link to="/account" className={accountItem}>Tài khoản</Link>
+            {user.role === 'buyer' ? (
+              <>
+                <Link to="/orders" className={accountItem}>Đơn mua</Link>
+                <Link to="/seller/register" className={accountItem}>Mở shop</Link>
+              </>
+            ) : <Link to={homeFor(user.role)} className={accountItem}>Khu vực của bạn</Link>}
+            <button type="button" onClick={() => void onLogout()} className={`${accountItem} cursor-pointer`}>Đăng xuất</button>
+          </>
+        ) : (
+          <>
+            <Link to="/login" className={accountItem}>Đăng nhập</Link>
+            <Link to="/register" className={accountItem}>Đăng ký</Link>
+          </>
+        )}
+      </div>
+    </details>
   )
 }
