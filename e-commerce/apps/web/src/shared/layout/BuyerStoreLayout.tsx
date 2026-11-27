@@ -10,14 +10,14 @@ import { StoreIcon } from './StoreIcon'
 const storeLinks = [
   { to: '/', label: 'Trang chủ' },
   { to: '/products', label: 'Sản phẩm' },
-  { to: '/#danh-muc', label: 'Danh mục' },
+  { to: '/products#catalog-filters', label: 'Danh mục' },
 ] as const
 
 const wrapper = 'mx-auto w-full max-w-7xl px-4 lg:px-8'
 const textLink = 'rounded-sm py-2 transition-colors hover:text-(--store-primary)'
 const accountItem = 'block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-(--store-soft) hover:text-(--store-primary)'
 
-export function BuyerStoreLayout({ children, home = false }: { children: ReactNode; home?: boolean }) {
+export function BuyerStoreLayout({ children, storefront = false }: { children: ReactNode; storefront?: boolean }) {
   const { status, user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -42,7 +42,7 @@ export function BuyerStoreLayout({ children, home = false }: { children: ReactNo
   }
 
   return (
-    <div className={`buyer-store flex min-h-full flex-col ${home ? 'store-home' : 'bg-zinc-50 dark:bg-zinc-950'}`}>
+    <div className={`buyer-store flex min-h-full flex-col ${storefront ? 'storefront' : 'bg-zinc-50 dark:bg-zinc-950'}`}>
       <a href="#buyer-main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-40 focus:rounded-lg focus:bg-white focus:px-4 focus:py-3 focus:text-(--store-primary)">
         Đến nội dung chính
       </a>
@@ -75,7 +75,7 @@ export function BuyerStoreLayout({ children, home = false }: { children: ReactNo
           </form>
 
           <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3" aria-busy={status === 'loading'}>
-            {home && user?.role === 'buyer' ? <CartWithCount key={user.id} /> : <CartLink />}
+            {storefront && user?.role === 'buyer' ? <CartWithCount key={user.id} /> : <CartLink />}
             {status === 'anonymous' && (
               <div className="hidden items-center gap-2 font-semibold text-(--store-muted) sm:flex">
                 <Link to="/login" className={textLink}>Đăng nhập</Link>
@@ -93,7 +93,7 @@ export function BuyerStoreLayout({ children, home = false }: { children: ReactNo
 
       <main id="buyer-main" tabIndex={-1} className="min-w-0 flex-1 scroll-mt-32 md:scroll-mt-20">{children}</main>
 
-      <footer className={`store-chrome border-t border-(--store-outline) bg-white py-10 ${home ? '' : 'mt-12'}`}>
+      <footer className={`store-chrome border-t border-(--store-outline) bg-white py-10 ${storefront ? '' : 'mt-12'}`}>
         <div className={`${wrapper} flex flex-col items-center justify-between gap-4 md:flex-row`}>
           <Link to="/" aria-label={`${BRAND} - Trang chủ`} className="flex shrink-0 items-center rounded-sm"><Logo variant="compact" /></Link>
           <nav aria-label="Điều hướng chân trang" className="flex flex-wrap items-center justify-center gap-x-6 text-(--store-muted)">

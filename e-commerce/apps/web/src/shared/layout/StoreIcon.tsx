@@ -3,6 +3,8 @@ const shapes = {
   cart: <><path d="M2 3h3l3.2 12h10.2L21 6H6" /><circle cx="9" cy="20" r="1" /><circle cx="18" cy="20" r="1" /></>,
   person: <><circle cx="12" cy="8" r="3" /><path d="M5 19a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5H5Z" /></>,
   chevron: <path d="m9 6 6 6-6 6" />,
+  tune: <path d="M3 6h8m4 0h6M11 3v6M3 12h3m4 0h11M6 9v6m-3 3h11m4 0h3m-7-3v6" />,
+  check: <path d="m5 12 4 4L19 6" />,
   arrow: <path d="M4 12h15m-6-6 6 6-6 6" />,
   shoe: <path d="M3 9.5 7 4l3 2 1.5 4 3 3 4.2 1.5a3 3 0 0 1 2.3 3V20h-8L3 11V9.5Zm1 0L14 18h7M9.5 8.5 8 10m4.5 1.5L11 13" />,
   chair: <path d="M6 11V7a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4M6 11a2 2 0 0 0-4 0v6a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-6a2 2 0 0 0-4 0v3H6v-3Zm-2 7v2m16-2v2" />,

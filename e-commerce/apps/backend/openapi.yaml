@@ -626,15 +626,24 @@ paths:
       summary: Tìm và lọc sản phẩm đang đăng bán
       description: |
         Áp dụng đồng thời các bộ lọc. Sản phẩm hết hàng vẫn hiển thị.
-        Có từ khóa thì xếp theo mức độ phù hợp và điểm phổ biến. Nếu không có từ khóa thì hiển thị sản phẩm mới trước.
+        Khi không chỉ định sort, có từ khóa thì xếp theo mức độ phù hợp và điểm phổ biến,
+        còn khi không có từ khóa thì hiển thị sản phẩm mới trước.
       security: []
       parameters:
         - { name: q, in: query, description: 'Từ khóa tiếng Việt có dấu hoặc không dấu.', schema: { type: string, maxLength: 255 } }
-        - { name: category, in: query, description: 'Slug danh mục cấp 1 hoặc cấp 2. Chọn cấp 1 để tìm trong các danh mục con.', schema: { type: string, minLength: 1, maxLength: 120 } }
+        - name: category
+          in: query
+          description: Chọn danh mục cấp 1 hoặc cấp 2 theo slug. Lặp lại tham số để tìm sản phẩm thuộc bất kỳ danh mục nào đã chọn.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items: { type: string, minLength: 1, maxLength: 120 }
         - { name: min_price, in: query, schema: { type: integer, format: int64, minimum: 0, maximum: 9007199254740991 } }
         - { name: max_price, in: query, schema: { type: integer, format: int64, minimum: 0, maximum: 9007199254740991 } }
         - { name: brand, in: query, description: 'Tên thương hiệu, so khớp chính xác và không phân biệt hoa thường.', schema: { type: string, maxLength: 100 } }
         - { name: province_code, in: query, description: 'Mã tỉnh/thành của shop.', schema: { type: string, minLength: 1, maxLength: 4 } }
+        - { name: sort, in: query, description: 'Sắp xếp theo ngày đăng hoặc giá trước khi phân trang.', schema: { type: string, enum: [newest, price-asc, price-desc] } }
         - { name: page, in: query, schema: { type: integer, minimum: 1, maximum: 100000, default: 1 } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 12 } }
       responses:

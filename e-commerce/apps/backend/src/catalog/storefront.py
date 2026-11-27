@@ -5,7 +5,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, aliased, contains_eager, selectinload
 
 from catalog.model import Category, Product, ProductImage, ProductStatus, Shop
-from catalog.schema import CatalogProductCard, CatalogProductDetail, CatalogProductPage
+from catalog.schema import CatalogProductCard, CatalogProductDetail, CatalogProductPage, CatalogSort
 from common.errors import ProblemError
 from discovery.search.rule_ranker import rank_products
 from orders.model import Inventory
@@ -31,8 +31,9 @@ def _product_fields(product: Product, in_stock: bool) -> dict:
 
 
 def list_products(
-    s: Session, *, q: str, category: str | None, min_price: int | None,
+    s: Session, *, q: str, category: list[str] | None, min_price: int | None,
     max_price: int | None, brand: str | None, province_code: str | None, page: int, limit: int,
+    sort: CatalogSort | None = None,
 ) -> CatalogProductPage:
     if min_price is not None and max_price is not None and min_price > max_price:
         raise ProblemError(422, "invalid-price-range", "Giá tối đa phải lớn hơn hoặc bằng giá tối thiểu.")
@@ -44,7 +45,7 @@ def list_products(
     )
     stmt = _published_products(cover).outerjoin(parent, parent.id == Category.parent_id)
     if category:
-        stmt = stmt.where(or_(Category.slug == category, parent.slug == category))
+        stmt = stmt.where(or_(Category.slug.in_(category), parent.slug.in_(category)))
     if min_price is not None:
         stmt = stmt.where(Product.price >= min_price)
     if max_price is not None:
@@ -55,6 +56,10 @@ def list_products(
         stmt = stmt.where(Shop.province_code == province_code)
 
     stmt = rank_products(stmt, q, parent)
+    if sort is not None:
+        price_order = {"price-asc": Product.price.asc(), "price-desc": Product.price.desc()}
+        order = [price_order[sort]] if sort in price_order else []
+        stmt = stmt.order_by(None).order_by(*order, Product.created_at.desc(), Product.id.desc())
     rows = s.execute(stmt.offset((page - 1) * limit).limit(limit + 1)).all()
     return CatalogProductPage(
         items=[

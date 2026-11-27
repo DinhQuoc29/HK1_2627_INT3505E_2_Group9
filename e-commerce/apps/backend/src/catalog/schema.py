@@ -54,6 +54,8 @@ class ProductCategoryOut(BaseModel):
 
 
 ProductState = Literal["active", "inactive"]
+CatalogSort = Literal["newest", "price-asc", "price-desc"]
+CategorySlug = Annotated[str, StringConstraints(min_length=1, max_length=120, pattern=r"^[^\x00]+$")]
 ImageUrl = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
 
 

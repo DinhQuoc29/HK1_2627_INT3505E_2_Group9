@@ -3,7 +3,7 @@
 /* The reference pages use the light palette. */
 @custom-variant dark {
   @media (prefers-color-scheme: dark) {
-    &:where(:not(.seller-reference, .seller-reference *, .store-home, .store-home *)) {
+    &:where(:not(.seller-reference, .seller-reference *, .storefront, .storefront *)) {
       @slot;
     }
   }
@@ -37,20 +37,20 @@ body {
   --store-outline: #f2dfdb;
 }
 
-.store-home,
+.storefront,
 .store-chrome {
   color: var(--store-ink);
   color-scheme: light;
   font-family: 'Be Vietnam Pro', var(--font-sans);
 }
 
-.store-home { background-color: #f8f9ff; }
+.storefront { background-color: #f8f9ff; }
 
 .store-chrome { font-size: 0.875rem; }
 
 .store-account-trigger::-webkit-details-marker { display: none; }
 
-:where(.store-home, .store-chrome) :where(a, button, summary):focus-visible {
+:where(.storefront, .store-chrome) :where(a, button, summary):focus-visible {
   outline: 2px solid var(--store-primary);
   outline-offset: 3px;
 }

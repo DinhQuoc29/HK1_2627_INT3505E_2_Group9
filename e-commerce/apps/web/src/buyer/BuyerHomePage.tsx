@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState, type ComponentProps, type ReactNode } from 'react'
+import { useCallback, useState, type ComponentProps, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type CatalogProductCard, type CatalogProductPage } from '../shared/api/client'
 import { BuyerStoreLayout } from '../shared/layout/BuyerStoreLayout'
 import { StoreIcon } from '../shared/layout/StoreIcon'
 import { BuyerEmptyState, BuyerLoading, BuyerRequestError } from './BuyerFeedback'
-import { ProductPhoto, productPrice } from './catalog/catalogUi'
+import { FavoriteProductButton, ProductPhoto, productPrice, useProductFavorites } from './catalog/catalogUi'
 import { useBuyerRequest } from './useBuyerRequest'
 
 const categoryIcons = new Map<string, ComponentProps<typeof StoreIcon>['name']>([
@@ -26,14 +26,13 @@ const budgetRanges = [
 ]
 
 const cardsPerSection = 4
-const favoritesKey = 'e-market:favorite-products'
 const loadHomeProducts = () => api.catalogProducts(new URLSearchParams({ limit: String(cardsPerSection * 2) }))
 const sectionLinkClass = 'inline-flex shrink-0 items-center gap-1 rounded-sm py-1 text-sm font-semibold text-(--store-primary) hover:text-(--store-primary-hover)'
 const productGridClass = 'grid grid-cols-2 gap-3 sm:gap-6 md:grid-cols-3 lg:grid-cols-4'
 
 export default function BuyerHomePage() {
   return (
-    <BuyerStoreLayout home>
+    <BuyerStoreLayout storefront>
       <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:py-10 lg:px-8">
         <section className="grid overflow-hidden rounded-xl bg-white shadow-xs lg:min-h-[520px] lg:grid-cols-[5fr_7fr]" aria-labelledby="store-hero-title">
           <div className="flex flex-col items-start justify-center gap-6 px-6 py-9 sm:p-10 lg:p-12">
@@ -127,26 +126,7 @@ function HomeCategories() {
 function HomeProducts() {
   const request = useBuyerRequest(loadHomeProducts)
   const [range, setRange] = useState(budgetRanges[0])
-  const [favorites, setFavorites] = useState<string[]>(() => {
-    try {
-      const saved: unknown = JSON.parse(localStorage.getItem(favoritesKey) ?? '[]')
-      return Array.isArray(saved) ? saved.filter((value): value is string => typeof value === 'string') : []
-    } catch {
-      return []
-    }
-  })
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(favoritesKey, JSON.stringify(favorites))
-    } catch {
-      // Keep the current selection when the browser restricts local storage.
-    }
-  }, [favorites])
-
-  function toggleFavorite(id: string) {
-    setFavorites((saved) => saved.includes(id) ? saved.filter((item) => item !== id) : [...saved, id])
-  }
+  const { favorites, toggleFavorite } = useProductFavorites()
 
   return (
     <>
@@ -240,17 +220,7 @@ function HomeProductCard({ product, favorite, onFavorite }: { product: CatalogPr
           <p className="text-xs text-(--store-muted)">{product.in_stock ? 'Còn hàng' : 'Hết hàng'}</p>
         </div>
       </Link>
-      {onFavorite && (
-        <button
-          type="button"
-          aria-label={`Yêu thích ${product.name}`}
-          aria-pressed={favorite}
-          onClick={onFavorite}
-          className="absolute top-5 right-5 grid size-8 cursor-pointer place-items-center rounded-full bg-white/95 text-(--store-muted) shadow-xs transition-colors hover:text-(--store-primary) aria-pressed:text-(--store-primary) sm:top-7 sm:right-7"
-        >
-          <StoreIcon name="heart" className="size-[18px]" filled={favorite} />
-        </button>
-      )}
+      {onFavorite && <FavoriteProductButton name={product.name} pressed={favorite ?? false} toggle={onFavorite} />}
     </li>
   )
 }

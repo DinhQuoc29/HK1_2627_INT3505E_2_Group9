@@ -8,7 +8,7 @@ from accounts.authentication import CurrentAuth
 from accounts.permissions import require_role
 from catalog import categories, listings, repository, shops, storefront
 from catalog.schema import (
-    CatalogCategoryGroup, CatalogProductDetail, CatalogProductPage,
+    CatalogCategoryGroup, CatalogProductDetail, CatalogProductPage, CatalogSort, CategorySlug,
     CreateShopRequest, ProductCategoryOut, ProductInput, ProductState, ProductStatusRequest, ProvinceOut, SellerProductOut,
     SellerProductPage, ShopOut,
 )
@@ -34,11 +34,12 @@ def list_categories():
 def browse_products(
     response: Response,
     q: str = Query("", max_length=255, pattern=r"^[^\x00]*$"),
-    category: str | None = Query(None, min_length=1, max_length=120, pattern=r"^[^\x00]+$"),
+    category: list[CategorySlug] | None = Query(None),
     min_price: int | None = Query(None, ge=0, le=9_007_199_254_740_991),
     max_price: int | None = Query(None, ge=0, le=9_007_199_254_740_991),
     brand: str | None = Query(None, max_length=100, pattern=r"^[^\x00]*$"),
     province_code: str | None = Query(None, min_length=1, max_length=4, pattern=r"^[^\x00]+$"),
+    sort: CatalogSort | None = Query(None),
     page: int = Query(1, ge=1, le=100_000),
     limit: int = Query(12, ge=1, le=50),
 ):
@@ -46,7 +47,7 @@ def browse_products(
     with session_scope() as s:
         return storefront.list_products(
             s, q=q, category=category, min_price=min_price, max_price=max_price,
-            brand=brand, province_code=province_code, page=page, limit=limit,
+            brand=brand, province_code=province_code, page=page, limit=limit, sort=sort,
         )
 
 

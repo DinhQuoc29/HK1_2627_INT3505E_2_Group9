@@ -7,23 +7,24 @@ type RequestState<T> =
   | { status: 'ready'; data: T }
 
 export function useBuyerRequest<T>(load: () => Promise<T>) {
-  const [state, setState] = useState<RequestState<T>>({ status: 'loading' })
+  const [result, setResult] = useState<{ load: () => Promise<T>; state: RequestState<T> }>()
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let current = true
     load().then(
-      (data) => { if (current) setState({ status: 'ready', data }) },
-      (error: unknown) => { if (current) setState({ status: 'error', error }) },
+      (data) => { if (current) setResult({ load, state: { status: 'ready', data } }) },
+      (error: unknown) => { if (current) setResult({ load, state: { status: 'error', error } }) },
     )
     return () => { current = false }
   }, [load, attempt])
 
   const retry = () => {
-    setState({ status: 'loading' })
+    setResult(undefined)
     setAttempt((value) => value + 1)
   }
 
+  const state: RequestState<T> = result?.load === load ? result.state : { status: 'loading' }
   return { state, retry }
 }
 
